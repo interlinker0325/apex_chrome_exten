@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import axios from 'axios'
 import ActivityLog from './ActivityLog'
 
 interface FormData {
@@ -49,42 +50,116 @@ export default function ApexPurchaser() {
     }
 
     setStatus('processing')
-    addLog('Connected to server')
-    addLog('Starting automation with provided settings...')
-    addLog('Starting APEX automation...')
-    addLog('Cookie consent handled')
-    addLog('Logging in...')
-    
-    // Simulate purchase process
-    setTimeout(() => {
-      addLog(`Starting purchase loop for ${formData.numberOfAccounts} accounts...`)
-    }, 1000)
+    addLog('Connecting to server...')
 
-    setTimeout(() => {
-      addLog('Processing account 1/3')
-    }, 2000)
+    try {
+      // Prepare the data to send to backend
+      const purchaseData = {
+        username: formData.username,
+        password: formData.password,
+        cardNumber: formData.cardNumber,
+        cvv: formData.cvv,
+        expiryMonth: formData.expiryMonth,
+        expiryYear: formData.expiryYear,
+        numberOfAccounts: formData.numberOfAccounts
+      }
 
-    setTimeout(() => {
-      addLog('Account 1 purchased successfully!')
-    }, 3500)
+      addLog('Sending purchase request to backend...')
+      
+      // Send POST request to your backend
+      // Replace 'http://localhost:8000/api/purchase' with your actual backend URL
+      const response = await axios.post('http://localhost:8000/api/purchase', purchaseData, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 second timeout
+      })
 
-    setTimeout(() => {
-      addLog('Processing account 2/3')
-    }, 4000)
-
-    setTimeout(() => {
-      addLog('Account 2 purchased successfully!')
-    }, 5500)
-
-    setTimeout(() => {
-      addLog('Processing account 3/3')
-    }, 6000)
-
-    setTimeout(() => {
-      addLog('Account 3 purchased successfully!')
-      addLog('All purchases completed successfully!')
+      if (response.status === 200) {
+        addLog('Connected to server successfully')
+        addLog('Starting automation with provided settings...')
+        addLog('Starting APEX automation...')
+        
+        // Handle successful response
+        if (response.data.message) {
+          addLog(response.data.message)
+        }
+        
+        // If your backend returns logs, you can process them here
+        if (response.data.logs && Array.isArray(response.data.logs)) {
+          response.data.logs.forEach((log: string) => {
+            addLog(log)
+          })
+        }
+        
+        addLog('Purchase request initiated successfully!')
+      }
+      
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          // Server responded with error status
+          addLog(`Error: Server responded with status ${error.response.status}`)
+          if (error.response.data?.message) {
+            addLog(`Server message: ${error.response.data.message}`)
+          }
+        } else if (error.request) {
+          // Request was made but no response received
+          addLog('Error: Unable to connect to server. Please check if the backend is running.')
+        } else {
+          // Something else happened
+          addLog(`Error: ${error.message}`)
+        }
+      } else {
+        addLog(`Unexpected error: ${error}`)
+      }
+      
       setStatus('ready')
-    }, 7500)
+      return
+    }
+
+    // Note: In a real implementation, the backend should handle the purchase process
+    // and send real-time updates via WebSocket or Server-Sent Events
+    // For now, we'll keep the status as 'processing' until the backend completes
+    
+    // Optional: Start polling for status updates
+    startStatusPolling()
+  }
+
+  // Optional: Function to poll backend for status updates
+  const startStatusPolling = () => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusResponse = await axios.get('http://localhost:8000/api/status')
+        
+        if (statusResponse.data.status === 'completed') {
+          addLog('All purchases completed successfully!')
+          setStatus('ready')
+          clearInterval(pollInterval)
+        } else if (statusResponse.data.status === 'error') {
+          addLog(`Error: ${statusResponse.data.message}`)
+          setStatus('ready')
+          clearInterval(pollInterval)
+        } else if (statusResponse.data.logs) {
+          // Add new logs from backend
+          statusResponse.data.logs.forEach((log: string) => {
+            addLog(log)
+          })
+        }
+      } catch (error) {
+        // Silently handle polling errors to avoid spam
+        console.error('Polling error:', error)
+      }
+    }, 2000) // Poll every 2 seconds
+
+    // Stop polling after 5 minutes to prevent infinite polling
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      if (status === 'processing') {
+        addLog('Status polling timeout. Please check backend manually.')
+        setStatus('ready')
+      }
+    }, 300000) // 5 minutes
   }
 
   const handleStop = () => {
