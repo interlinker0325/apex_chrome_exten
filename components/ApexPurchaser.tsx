@@ -76,6 +76,21 @@ export default function ApexPurchaser() {
       return
     }
 
+    // Set a timeout to stop polling after 10 minutes
+    const timeoutId = setTimeout(() => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        setPollingInterval(null)
+        addLog('⏰ Polling timeout - assuming process completed')
+        setStatus('completed')
+        setTimeout(() => {
+          setStatus('ready')
+          setSessionId(null)
+          addLog('🔄 System ready for new purchase')
+        }, 3000)
+      }
+    }, 10 * 60 * 1000) // 10 minutes
+
     const interval = setInterval(async () => {
       try {
         const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
@@ -92,6 +107,7 @@ export default function ApexPurchaser() {
         // Stop polling if process is completed, stopped, or error
         if (['completed', 'stopped', 'error'].includes(backendStatus)) {
           clearInterval(interval)
+          clearTimeout(timeoutId)
           setPollingInterval(null)
           
           // Reset UI state after showing final status
@@ -104,7 +120,22 @@ export default function ApexPurchaser() {
       } catch (error) {
         console.error('Polling error:', error)
         // Add error to logs for debugging
-        addLog(`Error checking status: ${error.message}`)
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        addLog(`Error checking status: ${errorMessage}`)
+        
+        // If we can't reach the backend, assume it's completed
+        if (error instanceof Error && error.message.includes('Network Error')) {
+          addLog('Backend connection lost - assuming process completed')
+          clearInterval(interval)
+          clearTimeout(timeoutId)
+          setPollingInterval(null)
+          setStatus('completed')
+          setTimeout(() => {
+            setStatus('ready')
+            setSessionId(null)
+            addLog('🔄 System ready for new purchase')
+          }, 3000)
+        }
       }
     }, 1000) // Poll every second for real-time updates
 
