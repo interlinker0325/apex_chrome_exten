@@ -115,7 +115,7 @@ export default function ApexPurchaser() {
           addLog('🔄 System ready for new purchase')
         }, 3000)
       }
-    }, 2 * 60 * 1000) // 2 minutes
+    }, 1 * 60 * 1000) // 1 minute
 
     let pollCount = 0
     const interval = setInterval(async () => {
@@ -137,8 +137,32 @@ export default function ApexPurchaser() {
           setLogs(backendLogs)
         }
         
-        // Stop polling if process is completed, stopped, or error
-        if (['completed', 'stopped', 'error'].includes(backendStatus)) {
+        // Handle error status immediately - don't wait
+        if (backendStatus === 'error') {
+          console.log(`[DEBUG] Error status received immediately: ${backendStatus}`)
+          clearInterval(interval)
+          clearTimeout(timeoutId)
+          setPollingInterval(null)
+          
+          // Set error status immediately
+          setStatus('error')
+          
+          // Force update logs immediately
+          if (backendLogs && Array.isArray(backendLogs)) {
+            setLogs(backendLogs)
+          }
+          
+          addLog('❌ Process failed - check logs for details')
+          
+          // Reset UI state quickly for errors
+          setTimeout(() => {
+            setStatus('ready')
+            setSessionId(null)
+            addLog('🔄 System ready for new purchase')
+          }, 2000) // Shorter delay for errors
+        }
+        // Handle other final statuses
+        else if (['completed', 'stopped'].includes(backendStatus)) {
           console.log(`[DEBUG] Final status received: ${backendStatus}`)
           clearInterval(interval)
           clearTimeout(timeoutId)
@@ -153,9 +177,7 @@ export default function ApexPurchaser() {
           }
           
           // Add specific final message based on status
-          if (backendStatus === 'error') {
-            addLog('❌ Process failed - check logs for details')
-          } else if (backendStatus === 'stopped') {
+          if (backendStatus === 'stopped') {
             addLog('🛑 Process stopped by user')
           } else if (backendStatus === 'completed') {
             addLog('✅ Process completed successfully')
@@ -196,7 +218,7 @@ export default function ApexPurchaser() {
           }, 3000)
         }
       }
-    }, 1000) // Poll every second for real-time updates
+    }, 500) // Poll every 500ms for faster error detection
 
     setPollingInterval(interval)
   }
