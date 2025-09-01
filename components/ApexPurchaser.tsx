@@ -96,6 +96,8 @@ export default function ApexPurchaser() {
         const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
         const { status: backendStatus, logs: backendLogs, current_iteration, total_iterations } = response.data
         
+        console.log(`[DEBUG] Frontend received status: ${backendStatus}`)
+        
         // Update status
         setStatus(backendStatus)
         
@@ -106,6 +108,7 @@ export default function ApexPurchaser() {
         
         // Stop polling if process is completed, stopped, or error
         if (['completed', 'stopped', 'error'].includes(backendStatus)) {
+          console.log(`[DEBUG] Final status received: ${backendStatus}`)
           clearInterval(interval)
           clearTimeout(timeoutId)
           setPollingInterval(null)
