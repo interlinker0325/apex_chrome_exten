@@ -76,20 +76,20 @@ export default function ApexPurchaser() {
       return
     }
 
-    // Set a timeout to stop polling after 10 minutes
+    // Set a timeout to stop polling after 5 minutes (shorter for login issues)
     const timeoutId = setTimeout(() => {
       if (pollingInterval) {
         clearInterval(pollingInterval)
         setPollingInterval(null)
-        addLog('⏰ Polling timeout - assuming process completed')
-        setStatus('completed')
+        addLog('⏰ Polling timeout - assuming process failed')
+        setStatus('error')
         setTimeout(() => {
           setStatus('ready')
           setSessionId(null)
           addLog('🔄 System ready for new purchase')
         }, 3000)
       }
-    }, 10 * 60 * 1000) // 10 minutes
+    }, 5 * 60 * 1000) // 5 minutes
 
     const interval = setInterval(async () => {
       try {
@@ -110,10 +110,23 @@ export default function ApexPurchaser() {
           clearTimeout(timeoutId)
           setPollingInterval(null)
           
+          // Set the final status immediately
+          setStatus(backendStatus)
+          
+          // Add specific final message based on status
+          if (backendStatus === 'error') {
+            addLog('❌ Process failed - check logs for details')
+          } else if (backendStatus === 'stopped') {
+            addLog('🛑 Process stopped by user')
+          } else if (backendStatus === 'completed') {
+            addLog('✅ Process completed successfully')
+          }
+          
           // Reset UI state after showing final status
           setTimeout(() => {
             setStatus('ready')
             setSessionId(null)
+            addLog('🔄 System ready for new purchase')
           }, 3000) // Show final status for 3 seconds before resetting
         }
         
@@ -123,13 +136,13 @@ export default function ApexPurchaser() {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         addLog(`Error checking status: ${errorMessage}`)
         
-        // If we can't reach the backend, assume it's completed
-        if (error instanceof Error && error.message.includes('Network Error')) {
-          addLog('Backend connection lost - assuming process completed')
+        // If we can't reach the backend, assume it's failed (likely login issue)
+        if (error instanceof Error && (error.message.includes('Network Error') || error.message.includes('ECONNREFUSED'))) {
+          addLog('❌ Backend connection lost - likely login failure')
           clearInterval(interval)
           clearTimeout(timeoutId)
           setPollingInterval(null)
-          setStatus('completed')
+          setStatus('error')
           setTimeout(() => {
             setStatus('ready')
             setSessionId(null)
