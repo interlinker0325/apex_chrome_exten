@@ -12,6 +12,7 @@ interface FormData {
   expiryYear: string
   cvv: string
   numberOfAccounts: number
+  couponCode: string
 }
 
 export default function ApexPurchaser() {
@@ -22,13 +23,16 @@ export default function ApexPurchaser() {
     expiryMonth: '01',
     expiryYear: '2024',
     cvv: '',
-    numberOfAccounts: 1
+    numberOfAccounts: 1,
+    couponCode: ''
   })
 
-  const [status, setStatus] = useState<'ready' | 'processing' | 'stopped'>('ready')
+  const [status, setStatus] = useState<'ready' | 'processing' | 'stopped' | 'completed' | 'error'>('ready')
   const [logs, setLogs] = useState<string[]>([
     '[10:23:45] System ready. Fill in your details and click Start Purchase to begin.'
   ])
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -41,6 +45,57 @@ export default function ApexPurchaser() {
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false })
     setLogs(prev => [...prev, `[${timestamp}] ${message}`])
+  }
+
+  const startStatusPolling = () => {
+    // Clear any existing polling
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+    }
+
+    if (!sessionId) {
+      console.error('No session ID available for polling')
+      return
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+        const { status: backendStatus, logs: backendLogs, current_iteration, total_iterations } = response.data
+        
+        // Update status
+        setStatus(backendStatus)
+        
+        // Add new logs from backend
+        if (backendLogs && Array.isArray(backendLogs)) {
+          setLogs(prev => {
+            // Only add logs that aren't already in our local logs
+            const newLogs = backendLogs.filter((log: string) => !prev.includes(log))
+            return [...prev, ...newLogs]
+          })
+        }
+        
+        // Stop polling if process is completed, stopped, or error
+        if (['completed', 'stopped', 'error'].includes(backendStatus)) {
+          clearInterval(interval)
+          setPollingInterval(null)
+          
+          if (backendStatus === 'completed') {
+            addLog('All purchases completed successfully!')
+          } else if (backendStatus === 'stopped') {
+            addLog('Purchase process stopped by user.')
+          } else if (backendStatus === 'error') {
+            addLog('An error occurred during the purchase process.')
+          }
+        }
+        
+      } catch (error) {
+        console.error('Polling error:', error)
+        // Don't add error to logs to avoid spam, just log to console
+      }
+    }, 1000) // Poll every second for real-time updates
+
+    setPollingInterval(interval)
   }
 
   const handleStartPurchase = async () => {
@@ -61,13 +116,13 @@ export default function ApexPurchaser() {
         cvv: formData.cvv,
         expiryMonth: formData.expiryMonth,
         expiryYear: formData.expiryYear,
-        numberOfAccounts: formData.numberOfAccounts
+        numberOfAccounts: formData.numberOfAccounts,
+        couponCode: formData.couponCode || undefined // Only send if not empty
       }
 
       addLog('Sending purchase request to backend...')
       
-      // Send POST request to your backend
-      // Replace 'http://localhost:8000/api/purchase' with your actual backend URL
+      // Send POST request to backend API
       const response = await axios.post('http://localhost:8000/api/purchase', purchaseData, {
         headers: {
           'Content-Type': 'application/json'
@@ -80,19 +135,14 @@ export default function ApexPurchaser() {
         addLog('Starting automation with provided settings...')
         addLog('Starting APEX automation...')
         
-        // Handle successful response
-        if (response.data.message) {
-          addLog(response.data.message)
+        // Store session ID for polling
+        if (response.data.session_id) {
+          setSessionId(response.data.session_id)
+          addLog(`Session created: ${response.data.session_id.slice(0, 8)}...`)
         }
         
-        // If your backend returns logs, you can process them here
-        if (response.data.logs && Array.isArray(response.data.logs)) {
-          response.data.logs.forEach((log: string) => {
-            addLog(log)
-          })
-        }
-        
-        addLog('Purchase request initiated successfully!')
+        // Start polling for status updates
+        startStatusPolling()
       }
       
     } catch (error) {
@@ -100,12 +150,13 @@ export default function ApexPurchaser() {
         if (error.response) {
           // Server responded with error status
           addLog(`Error: Server responded with status ${error.response.status}`)
-          if (error.response.data?.message) {
-            addLog(`Server message: ${error.response.data.message}`)
+          if (error.response.data?.error) {
+            addLog(`Server message: ${error.response.data.error}`)
           }
         } else if (error.request) {
           // Request was made but no response received
           addLog('Error: Unable to connect to server. Please check if the backend is running.')
+          addLog('Make sure to start the API server with: python api_server.py')
         } else {
           // Something else happened
           addLog(`Error: ${error.message}`)
@@ -117,62 +168,54 @@ export default function ApexPurchaser() {
       setStatus('ready')
       return
     }
-
-    // Note: In a real implementation, the backend should handle the purchase process
-    // and send real-time updates via WebSocket or Server-Sent Events
-    // For now, we'll keep the status as 'processing' until the backend completes
-    
-    // Optional: Start polling for status updates
-    startStatusPolling()
   }
 
-  // Optional: Function to poll backend for status updates
-  const startStatusPolling = () => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const statusResponse = await axios.get('http://localhost:8000/api/status')
+  const handleStop = async () => {
+    try {
+      if (!sessionId) {
+        addLog('Error: No active session to stop')
+        return
+      }
+      
+      addLog('Sending stop request to backend...')
+      
+      const response = await axios.post(`http://localhost:8000/api/stop/${sessionId}`)
+      
+      if (response.status === 200) {
+        addLog('Stop request sent successfully')
+        setStatus('stopped')
         
-        if (statusResponse.data.status === 'completed') {
-          addLog('All purchases completed successfully!')
-          setStatus('ready')
-          clearInterval(pollInterval)
-        } else if (statusResponse.data.status === 'error') {
-          addLog(`Error: ${statusResponse.data.message}`)
-          setStatus('ready')
-          clearInterval(pollInterval)
-        } else if (statusResponse.data.logs) {
-          // Add new logs from backend
-          statusResponse.data.logs.forEach((log: string) => {
-            addLog(log)
-          })
+        // Stop polling
+        if (pollingInterval) {
+          clearInterval(pollingInterval)
+          setPollingInterval(null)
         }
-      } catch (error) {
-        // Silently handle polling errors to avoid spam
-        console.error('Polling error:', error)
+        
+        // Reset status after a delay
+        setTimeout(() => setStatus('ready'), 2000)
       }
-    }, 2000) // Poll every 2 seconds
-
-    // Stop polling after 5 minutes to prevent infinite polling
-    setTimeout(() => {
-      clearInterval(pollInterval)
-      if (status === 'processing') {
-        addLog('Status polling timeout. Please check backend manually.')
-        setStatus('ready')
-      }
-    }, 300000) // 5 minutes
+    } catch (error) {
+      addLog('Error sending stop request to backend')
+      console.error('Stop error:', error)
+    }
   }
 
-  const handleStop = () => {
-    setStatus('stopped')
-    addLog('Purchase process stopped by user.')
-    setTimeout(() => setStatus('ready'), 1000)
-  }
+  // Cleanup polling on component unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+      }
+    }
+  }, [pollingInterval])
 
   const getStatusColor = () => {
     switch (status) {
       case 'ready': return 'bg-green-200 text-green-800'
       case 'processing': return 'bg-yellow-200 text-yellow-800'
       case 'stopped': return 'bg-red-200 text-red-800'
+      case 'completed': return 'bg-blue-200 text-blue-800'
+      case 'error': return 'bg-red-200 text-red-800'
       default: return 'bg-gray-200 text-gray-800'
     }
   }
@@ -182,6 +225,8 @@ export default function ApexPurchaser() {
       case 'ready': return 'Ready to start'
       case 'processing': return 'Processing...'
       case 'stopped': return 'Stopped'
+      case 'completed': return 'Completed'
+      case 'error': return 'Error'
       default: return 'Ready to start'
     }
   }
@@ -300,17 +345,30 @@ export default function ApexPurchaser() {
           {/* Settings Section */}
           <div className="mb-8">
             <h2 className="section-title">Settings</h2>
-            <div className="form-group">
-              <label className="form-label">Number of Accounts:</label>
-              <input
-                type="number"
-                name="numberOfAccounts"
-                value={formData.numberOfAccounts}
-                onChange={handleInputChange}
-                min="1"
-                max="10"
-                className="form-input w-32"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="form-group">
+                <label className="form-label">Number of Accounts:</label>
+                <input
+                  type="number"
+                  name="numberOfAccounts"
+                  value={formData.numberOfAccounts}
+                  onChange={handleInputChange}
+                  min="1"
+                  max="10"
+                  className="form-input w-32"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Coupon Code (Optional):</label>
+                <input
+                  type="text"
+                  name="couponCode"
+                  value={formData.couponCode}
+                  onChange={handleInputChange}
+                  placeholder="Leave empty to use default"
+                  className="form-input"
+                />
+              </div>
             </div>
           </div>
 
