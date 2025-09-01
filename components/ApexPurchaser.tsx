@@ -19,7 +19,7 @@ export default function ApexPurchaser() {
     username: '',
     password: '',
     cardNumber: '',
-    expiryMonth: '01',
+    expiryMonth: '1',
     expiryYear: '2024',
     cvv: '',
     numberOfAccounts: 1
@@ -84,13 +84,9 @@ export default function ApexPurchaser() {
         // Update status
         setStatus(backendStatus)
         
-        // Add new logs from backend
+        // Replace logs with backend logs to ensure sync
         if (backendLogs && Array.isArray(backendLogs)) {
-          setLogs(prev => {
-            // Only add logs that aren't already in our local logs
-            const newLogs = backendLogs.filter((log: string) => !prev.includes(log))
-            return [...prev, ...newLogs]
-          })
+          setLogs(backendLogs)
         }
         
         // Stop polling if process is completed, stopped, or error
@@ -98,18 +94,25 @@ export default function ApexPurchaser() {
           clearInterval(interval)
           setPollingInterval(null)
           
-          if (backendStatus === 'completed') {
-            addLog('All purchases completed successfully!')
-          } else if (backendStatus === 'stopped') {
-            addLog('Purchase process stopped by user.')
-          } else if (backendStatus === 'error') {
-            addLog('An error occurred during the purchase process.')
-          }
+          // Add final status message if not already in logs
+          const finalMessage = backendStatus === 'completed' ? 
+            'All purchases completed successfully!' :
+            backendStatus === 'stopped' ? 
+            'Purchase process stopped by user.' :
+            'An error occurred during the purchase process.'
+          
+          setLogs(prev => {
+            if (!prev.some(log => log.includes(finalMessage))) {
+              return [...prev, finalMessage]
+            }
+            return prev
+          })
         }
         
       } catch (error) {
         console.error('Polling error:', error)
-        // Don't add error to logs to avoid spam, just log to console
+        // Add error to logs for debugging
+        addLog(`Error checking status: ${error.message}`)
       }
     }, 1000) // Poll every second for real-time updates
 
@@ -130,6 +133,7 @@ export default function ApexPurchaser() {
     }
 
     setStatus('processing')
+    setLogs(['[System] Starting new purchase process...'])
     addLog('Connecting to server...')
 
     try {
@@ -207,16 +211,38 @@ export default function ApexPurchaser() {
       
       if (response.status === 200) {
         addLog('Stop request sent successfully')
-        setStatus('stopped')
         
-        // Stop polling
+        // Stop polling immediately
         if (pollingInterval) {
           clearInterval(pollingInterval)
           setPollingInterval(null)
         }
         
-        // Reset status after a delay
-        setTimeout(() => setStatus('ready'), 2000)
+        // Set status to stopped and wait for backend confirmation
+        setStatus('stopped')
+        
+        // Poll one more time to get final status from backend
+        setTimeout(async () => {
+          try {
+            const statusResponse = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+            const { status: finalStatus, logs: finalLogs } = statusResponse.data
+            
+            setStatus(finalStatus)
+            if (finalLogs && Array.isArray(finalLogs)) {
+              setLogs(finalLogs)
+            }
+            
+            // Reset to ready after showing final status
+            setTimeout(() => {
+              setStatus('ready')
+              setSessionId(null)
+            }, 3000)
+          } catch (error) {
+            console.error('Error getting final status:', error)
+            setStatus('ready')
+            setSessionId(null)
+          }
+        }, 1000)
       }
     } catch (error) {
       addLog('Error sending stop request to backend')
@@ -327,10 +353,11 @@ export default function ApexPurchaser() {
                   className="form-select"
                 >
                   {Array.from({ length: 12 }, (_, i) => {
-                    const month = (i + 1).toString().padStart(2, '0')
+                    const month = (i + 1).toString()
+                    const displayMonth = month.padStart(2, '0')
                     return (
                       <option key={month} value={month}>
-                        {month}
+                        {displayMonth}
                       </option>
                     )
                   })}
