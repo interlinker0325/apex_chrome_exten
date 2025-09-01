@@ -76,33 +76,64 @@ export default function ApexPurchaser() {
       return
     }
 
-    // Set a timeout to stop polling after 5 minutes (shorter for login issues)
-    const timeoutId = setTimeout(() => {
+    // Set a timeout to stop polling after 2 minutes (shorter for login issues)
+    const timeoutId = setTimeout(async () => {
       if (pollingInterval) {
         clearInterval(pollingInterval)
         setPollingInterval(null)
-        addLog('⏰ Polling timeout - assuming process failed')
-        setStatus('error')
+        
+        // Do one final status check before giving up
+        try {
+          console.log(`[DEBUG] Timeout reached, doing final status check for session ${sessionId}`)
+          const finalResponse = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+          const { status: finalStatus, logs: finalLogs } = finalResponse.data
+          
+          console.log(`[DEBUG] Final status check result: ${finalStatus}`)
+          setStatus(finalStatus)
+          
+          if (finalLogs && Array.isArray(finalLogs)) {
+            setLogs(finalLogs)
+          }
+          
+          if (finalStatus === 'error') {
+            addLog('❌ Process failed - check logs for details')
+          } else if (finalStatus === 'completed') {
+            addLog('✅ Process completed successfully')
+          } else {
+            addLog('⏰ Polling timeout - assuming process failed')
+            setStatus('error')
+          }
+        } catch (error) {
+          console.log(`[DEBUG] Final status check failed: ${error}`)
+          addLog('⏰ Polling timeout - assuming process failed')
+          setStatus('error')
+        }
+        
         setTimeout(() => {
           setStatus('ready')
           setSessionId(null)
           addLog('🔄 System ready for new purchase')
         }, 3000)
       }
-    }, 5 * 60 * 1000) // 5 minutes
+    }, 2 * 60 * 1000) // 2 minutes
 
+    let pollCount = 0
     const interval = setInterval(async () => {
       try {
+        pollCount++
+        console.log(`[DEBUG] Polling attempt ${pollCount} for session ${sessionId}`)
+        
         const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
         const { status: backendStatus, logs: backendLogs, current_iteration, total_iterations } = response.data
         
-        console.log(`[DEBUG] Frontend received status: ${backendStatus}`)
+        console.log(`[DEBUG] Frontend received status: ${backendStatus} (poll ${pollCount})`)
         
         // Update status
         setStatus(backendStatus)
         
         // Replace logs with backend logs to ensure sync
         if (backendLogs && Array.isArray(backendLogs)) {
+          console.log(`[DEBUG] Updating logs with ${backendLogs.length} entries`)
           setLogs(backendLogs)
         }
         
@@ -115,6 +146,11 @@ export default function ApexPurchaser() {
           
           // Set the final status immediately
           setStatus(backendStatus)
+          
+          // Force update logs one more time to ensure we have the latest
+          if (backendLogs && Array.isArray(backendLogs)) {
+            setLogs(backendLogs)
+          }
           
           // Add specific final message based on status
           if (backendStatus === 'error') {
@@ -151,6 +187,13 @@ export default function ApexPurchaser() {
             setSessionId(null)
             addLog('🔄 System ready for new purchase')
           }, 3000)
+        } else {
+          // For other errors, try one more time after a delay
+          console.log(`[DEBUG] Polling error on attempt ${pollCount}, will retry...`)
+          if (pollCount < 3) {
+            // Don't give up immediately, keep trying
+            return
+          }
         }
       }
     }, 1000) // Poll every second for real-time updates
