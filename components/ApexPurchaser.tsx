@@ -94,19 +94,11 @@ export default function ApexPurchaser() {
           clearInterval(interval)
           setPollingInterval(null)
           
-          // Add final status message if not already in logs
-          const finalMessage = backendStatus === 'completed' ? 
-            'All purchases completed successfully!' :
-            backendStatus === 'stopped' ? 
-            'Purchase process stopped by user.' :
-            'An error occurred during the purchase process.'
-          
-          setLogs(prev => {
-            if (!prev.some(log => log.includes(finalMessage))) {
-              return [...prev, finalMessage]
-            }
-            return prev
-          })
+          // Reset UI state after showing final status
+          setTimeout(() => {
+            setStatus('ready')
+            setSessionId(null)
+          }, 3000) // Show final status for 3 seconds before resetting
         }
         
       } catch (error) {
@@ -205,12 +197,12 @@ export default function ApexPurchaser() {
         return
       }
       
-      addLog('Sending stop request to backend...')
+      addLog('🛑 Sending stop request to backend...')
       
       const response = await axios.post(`http://localhost:8000/api/stop/${sessionId}`)
       
       if (response.status === 200) {
-        addLog('Stop request sent successfully')
+        addLog('✅ Stop request sent successfully')
         
         // Stop polling immediately
         if (pollingInterval) {
@@ -218,7 +210,7 @@ export default function ApexPurchaser() {
           setPollingInterval(null)
         }
         
-        // Set status to stopped and wait for backend confirmation
+        // Set status to stopped immediately
         setStatus('stopped')
         
         // Poll one more time to get final status from backend
@@ -236,17 +228,22 @@ export default function ApexPurchaser() {
             setTimeout(() => {
               setStatus('ready')
               setSessionId(null)
-            }, 3000)
+              addLog('🔄 System ready for new purchase')
+            }, 2000)
           } catch (error) {
             console.error('Error getting final status:', error)
             setStatus('ready')
             setSessionId(null)
+            addLog('🔄 System ready for new purchase')
           }
         }, 1000)
       }
     } catch (error) {
-      addLog('Error sending stop request to backend')
+      addLog('❌ Error sending stop request to backend')
       console.error('Stop error:', error)
+      // Reset UI state even if stop request fails
+      setStatus('ready')
+      setSessionId(null)
     }
   }
 
@@ -417,14 +414,14 @@ export default function ApexPurchaser() {
             <button
               onClick={handleStartPurchase}
               disabled={status === 'processing'}
-              className={`btn btn-primary ${status === 'processing' ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`btn btn-primary ${status === 'processing' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}`}
             >
-              Start Purchase
+              {status === 'processing' ? 'Processing...' : 'Start Purchase'}
             </button>
             <button
               onClick={handleStop}
               disabled={status !== 'processing'}
-              className={`btn btn-secondary ${status !== 'processing' ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`btn btn-secondary ${status !== 'processing' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-600'}`}
             >
               Stop
             </button>
