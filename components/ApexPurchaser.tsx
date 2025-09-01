@@ -12,7 +12,6 @@ interface FormData {
   expiryYear: string
   cvv: string
   numberOfAccounts: number
-  couponCode: string
 }
 
 export default function ApexPurchaser() {
@@ -23,8 +22,7 @@ export default function ApexPurchaser() {
     expiryMonth: '01',
     expiryYear: '2024',
     cvv: '',
-    numberOfAccounts: 1,
-    couponCode: ''
+    numberOfAccounts: 1
   })
 
   const [status, setStatus] = useState<'ready' | 'processing' | 'stopped' | 'completed' | 'error'>('ready')
@@ -116,8 +114,7 @@ export default function ApexPurchaser() {
         cvv: formData.cvv,
         expiryMonth: formData.expiryMonth,
         expiryYear: formData.expiryYear,
-        numberOfAccounts: formData.numberOfAccounts,
-        couponCode: formData.couponCode || undefined // Only send if not empty
+        numberOfAccounts: formData.numberOfAccounts
       }
 
       addLog('Sending purchase request to backend...')
@@ -356,17 +353,6 @@ export default function ApexPurchaser() {
                   min="1"
                   max="10"
                   className="form-input w-32"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Coupon Code (Optional):</label>
-                <input
-                  type="text"
-                  name="couponCode"
-                  value={formData.couponCode}
-                  onChange={handleInputChange}
-                  placeholder="Leave empty to use default"
-                  className="form-input"
                 />
               </div>
             </div>
