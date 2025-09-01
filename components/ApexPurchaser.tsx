@@ -175,6 +175,13 @@ export default function ApexPurchaser() {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         addLog(`Error checking status: ${errorMessage}`)
         
+        // For other errors, try one more time after a delay
+        console.log(`[DEBUG] Polling error on attempt ${pollCount}, will retry...`)
+        if (pollCount < 3) {
+          // Don't give up immediately, keep trying
+          return
+        }
+        
         // If we can't reach the backend, assume it's failed (likely login issue)
         if (error instanceof Error && (error.message.includes('Network Error') || error.message.includes('ECONNREFUSED'))) {
           addLog('❌ Backend connection lost - likely login failure')
@@ -187,13 +194,6 @@ export default function ApexPurchaser() {
             setSessionId(null)
             addLog('🔄 System ready for new purchase')
           }, 3000)
-        } else {
-          // For other errors, try one more time after a delay
-          console.log(`[DEBUG] Polling error on attempt ${pollCount}, will retry...`)
-          if (pollCount < 3) {
-            // Don't give up immediately, keep trying
-            return
-          }
         }
       }
     }, 1000) // Poll every second for real-time updates
