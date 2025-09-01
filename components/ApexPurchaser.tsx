@@ -11,7 +11,7 @@ interface FormData {
   expiryMonth: string
   expiryYear: string
   cvv: string
-  numberOfAccounts: number
+  numberOfAccounts: number | string
 }
 
 export default function ApexPurchaser() {
@@ -34,10 +34,30 @@ export default function ApexPurchaser() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'numberOfAccounts' ? parseInt(value) || 1 : value
-    }))
+    
+    if (name === 'numberOfAccounts') {
+      // Handle number of accounts input more gracefully
+      const numValue = parseInt(value)
+      if (value === '' || isNaN(numValue)) {
+        // Allow empty input while typing
+        setFormData(prev => ({
+          ...prev,
+          [name]: value === '' ? '' : 1
+        }))
+      } else {
+        // Valid number entered
+        setFormData(prev => ({
+          ...prev,
+          [name]: Math.max(1, Math.min(10, numValue)) // Clamp between 1-10
+        }))
+      }
+    } else {
+      // Handle other fields normally
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }))
+    }
   }
 
   const addLog = (message: string) => {
@@ -101,6 +121,13 @@ export default function ApexPurchaser() {
       addLog('Error: Please fill in all required fields.')
       return
     }
+    
+    // Validate number of accounts
+    const accountsNum = typeof formData.numberOfAccounts === 'string' ? parseInt(formData.numberOfAccounts) : formData.numberOfAccounts
+    if (isNaN(accountsNum) || accountsNum < 1 || accountsNum > 10) {
+      addLog('Error: Number of accounts must be between 1 and 10.')
+      return
+    }
 
     setStatus('processing')
     addLog('Connecting to server...')
@@ -114,7 +141,7 @@ export default function ApexPurchaser() {
         cvv: formData.cvv,
         expiryMonth: formData.expiryMonth,
         expiryYear: formData.expiryYear,
-        numberOfAccounts: formData.numberOfAccounts
+        numberOfAccounts: accountsNum
       }
 
       addLog('Sending purchase request to backend...')
