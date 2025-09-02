@@ -227,7 +227,7 @@ export default function ApexPurchaser() {
           }, 3000)
         }
       }
-    }, 500) // Poll every 500ms for faster error detection
+    }, 1000) // Poll every 500ms for faster error detection
 
     setPollingInterval(interval)
   }
