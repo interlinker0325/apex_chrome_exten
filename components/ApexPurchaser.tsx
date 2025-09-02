@@ -173,6 +173,7 @@ export default function ApexPurchaser() {
           
           // Force update logs one more time to ensure we have the latest
           if (backendLogs && Array.isArray(backendLogs)) {
+            console.log(`[DEBUG] Final logs update with ${backendLogs.length} entries`)
             setLogs(backendLogs)
           }
           
@@ -185,6 +186,7 @@ export default function ApexPurchaser() {
           
           // Reset UI state after showing final status
           setTimeout(() => {
+            console.log(`[DEBUG] Resetting UI to ready state`)
             setStatus('ready')
             setSessionId(null)
             addLog('🔄 System ready for new purchase')
@@ -299,6 +301,39 @@ export default function ApexPurchaser() {
       
       setStatus('ready')
       return
+    }
+  }
+
+  const handleManualStatusCheck = async () => {
+    if (!sessionId) {
+      addLog('Error: No active session to check')
+      return
+    }
+    
+    try {
+      addLog('🔍 Manual status check...')
+      const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+      const { status: backendStatus, logs: backendLogs } = response.data
+      
+      console.log(`[DEBUG] Manual status check result: ${backendStatus}`)
+      addLog(`📊 Manual check - Status: ${backendStatus}`)
+      
+      setStatus(backendStatus)
+      if (backendLogs && Array.isArray(backendLogs)) {
+        setLogs(backendLogs)
+      }
+      
+      if (['completed', 'stopped', 'error'].includes(backendStatus)) {
+        addLog('✅ Process finished - UI will reset shortly')
+        setTimeout(() => {
+          setStatus('ready')
+          setSessionId(null)
+          addLog('🔄 System ready for new purchase')
+        }, 2000)
+      }
+    } catch (error) {
+      addLog('❌ Manual status check failed')
+      console.error('Manual status check error:', error)
     }
   }
 
@@ -537,6 +572,14 @@ export default function ApexPurchaser() {
             >
               Stop
             </button>
+            {sessionId && (
+              <button
+                onClick={handleManualStatusCheck}
+                className="btn btn-tertiary hover:bg-gray-600"
+              >
+                Check Status
+              </button>
+            )}
           </div>
 
           {/* Activity Log */}
