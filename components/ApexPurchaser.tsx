@@ -86,7 +86,7 @@ export default function ApexPurchaser() {
         // Do one final status check before giving up
         try {
           console.log(`[DEBUG] Timeout reached, doing final status check for session ${currentSessionId}`)
-          const finalResponse = await axios.get(`http://localhost:8000/api/status/${currentSessionId}`)
+          const finalResponse = await axios.get(`https://communal-personally-crane.ngrok-free.app/api/status/${currentSessionId}`)
           const { status: finalStatus, logs: finalLogs } = finalResponse.data
           
           console.log(`[DEBUG] Final status check result: ${finalStatus}`)
@@ -125,7 +125,7 @@ export default function ApexPurchaser() {
         console.log(`[DEBUG] Polling attempt ${pollCount} for session ${currentSessionId}`)
         addLog(`🔍 Polling attempt ${pollCount}...`)
         
-        const response = await axios.get(`http://localhost:8000/api/status/${currentSessionId}`)
+        const response = await axios.get(`https://communal-personally-crane.ngrok-free.app/api/status/${currentSessionId}`)
         const { status: backendStatus, logs: backendLogs, current_iteration, total_iterations } = response.data
         
         console.log(`[DEBUG] Frontend received status: ${backendStatus} (poll ${pollCount})`)
@@ -264,7 +264,7 @@ export default function ApexPurchaser() {
       addLog('Sending purchase request to backend...')
       
       // Send POST request to backend API
-      const response = await axios.post('http://localhost:8000/api/purchase', purchaseData, {
+      const response = await axios.post('https://communal-personally-crane.ngrok-free.app/api/purchase', purchaseData, {
         headers: {
           'Content-Type': 'application/json'
         },
@@ -319,7 +319,7 @@ export default function ApexPurchaser() {
     
     try {
       addLog('🔍 Manual status check...')
-      const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+      const response = await axios.get(`https://communal-personally-crane.ngrok-free.app/api/status/${sessionId}`)
       const { status: backendStatus, logs: backendLogs } = response.data
       
       console.log(`[DEBUG] Manual status check result: ${backendStatus}`)
@@ -353,7 +353,7 @@ export default function ApexPurchaser() {
       
       addLog('🛑 Sending stop request to backend...')
       
-      const response = await axios.post(`http://localhost:8000/api/stop/${sessionId}`)
+      const response = await axios.post(`https://communal-personally-crane.ngrok-free.app/api/stop/${sessionId}`)
       
       if (response.status === 200) {
         addLog('✅ Stop request sent successfully')
@@ -370,7 +370,7 @@ export default function ApexPurchaser() {
         // Poll one more time to get final status from backend
         setTimeout(async () => {
           try {
-            const statusResponse = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+            const statusResponse = await axios.get(`https://communal-personally-crane.ngrok-free.app/api/status/${sessionId}`)
             const { status: finalStatus, logs: finalLogs } = statusResponse.data
             
             setStatus(finalStatus)
