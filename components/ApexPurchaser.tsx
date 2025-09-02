@@ -122,11 +122,13 @@ export default function ApexPurchaser() {
       try {
         pollCount++
         console.log(`[DEBUG] Polling attempt ${pollCount} for session ${sessionId}`)
+        addLog(`🔍 Polling attempt ${pollCount}...`)
         
         const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
         const { status: backendStatus, logs: backendLogs, current_iteration, total_iterations } = response.data
         
         console.log(`[DEBUG] Frontend received status: ${backendStatus} (poll ${pollCount})`)
+        addLog(`📊 Status: ${backendStatus} (poll ${pollCount})`)
         
         // Update status
         setStatus(backendStatus)
@@ -191,6 +193,10 @@ export default function ApexPurchaser() {
             setSessionId(null)
             addLog('🔄 System ready for new purchase')
           }, 3000) // Show final status for 3 seconds before resetting
+        }
+        // If status is still processing, continue polling
+        else if (backendStatus === 'processing') {
+          console.log(`[DEBUG] Still processing... (poll ${pollCount})`)
         }
         
       } catch (error) {
