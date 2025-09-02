@@ -65,13 +65,14 @@ export default function ApexPurchaser() {
     setLogs(prev => [...prev, `[${timestamp}] ${message}`])
   }
 
-  const startStatusPolling = () => {
+  const startStatusPolling = (sessionIdToUse?: string) => {
     // Clear any existing polling
     if (pollingInterval) {
       clearInterval(pollingInterval)
     }
 
-    if (!sessionId) {
+    const currentSessionId = sessionIdToUse || sessionId
+    if (!currentSessionId) {
       console.error('No session ID available for polling')
       return
     }
@@ -84,8 +85,8 @@ export default function ApexPurchaser() {
         
         // Do one final status check before giving up
         try {
-          console.log(`[DEBUG] Timeout reached, doing final status check for session ${sessionId}`)
-          const finalResponse = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+          console.log(`[DEBUG] Timeout reached, doing final status check for session ${currentSessionId}`)
+          const finalResponse = await axios.get(`http://localhost:8000/api/status/${currentSessionId}`)
           const { status: finalStatus, logs: finalLogs } = finalResponse.data
           
           console.log(`[DEBUG] Final status check result: ${finalStatus}`)
@@ -121,10 +122,10 @@ export default function ApexPurchaser() {
     const interval = setInterval(async () => {
       try {
         pollCount++
-        console.log(`[DEBUG] Polling attempt ${pollCount} for session ${sessionId}`)
+        console.log(`[DEBUG] Polling attempt ${pollCount} for session ${currentSessionId}`)
         addLog(`🔍 Polling attempt ${pollCount}...`)
         
-        const response = await axios.get(`http://localhost:8000/api/status/${sessionId}`)
+        const response = await axios.get(`http://localhost:8000/api/status/${currentSessionId}`)
         const { status: backendStatus, logs: backendLogs, current_iteration, total_iterations } = response.data
         
         console.log(`[DEBUG] Frontend received status: ${backendStatus} (poll ${pollCount})`)
@@ -279,10 +280,10 @@ export default function ApexPurchaser() {
         if (response.data.session_id) {
           setSessionId(response.data.session_id)
           addLog(`Session created: ${response.data.session_id.slice(0, 8)}...`)
+          
+          // Start polling for status updates with the session ID
+          startStatusPolling(response.data.session_id)
         }
-        
-        // Start polling for status updates
-        startStatusPolling()
       }
       
     } catch (error) {
