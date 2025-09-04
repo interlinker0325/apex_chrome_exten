@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import Select from 'react-select'
 import ActivityLog from './ActivityLog'
 
 interface FormData {
@@ -13,18 +12,8 @@ interface FormData {
   expiryYear: string
   cvv: string
   numberOfAccounts: number | string
-  selectedAccounts: string[]
+  selectedAccount: string
 }
-
-// Account options for react-select
-const accountOptions = [
-  { value: '25k-Tradovate', label: '25k Tradovate' },
-  { value: '50k-Tradovate', label: '50k Tradovate' },
-  { value: '100k-Tradovate', label: '100k Tradovate' },
-  { value: '150k-Tradovate', label: '150k Tradovate' },
-  { value: '250k-Tradovate', label: '250k Tradovate' },
-  { value: '300k-Tradovate', label: '300k Tradovate' }
-]
 
 export default function ApexPurchaser() {
   const [formData, setFormData] = useState<FormData>({
@@ -35,7 +24,7 @@ export default function ApexPurchaser() {
     expiryYear: '2024',
     cvv: '',
     numberOfAccounts: 1,
-    selectedAccounts: ['50k-Tradovate'] // Default to 50k
+    selectedAccount: '50k-Tradovate' // Default to 50k
   })
 
   const [status, setStatus] = useState<'ready' | 'processing' | 'stopped' | 'completed' | 'error'>('ready')
@@ -58,10 +47,10 @@ export default function ApexPurchaser() {
           [name]: value === '' ? '' : 1
         }))
       } else {
-        // Valid number entered - don't clamp during typing, only validate on submit
+        // Valid number entered
         setFormData(prev => ({
           ...prev,
-          [name]: numValue
+          [name]: Math.max(1, Math.min(10, numValue)) // Clamp between 1-10
         }))
       }
     } else {
@@ -251,16 +240,16 @@ export default function ApexPurchaser() {
       return
     }
     
-    // Validate selected accounts
-    if (formData.selectedAccounts.length === 0) {
-      addLog('Error: Please select at least one account type.')
+    // Validate selected account
+    if (!formData.selectedAccount) {
+      addLog('Error: Please select an account type.')
       return
     }
     
     // Validate number of accounts
     const accountsNum = typeof formData.numberOfAccounts === 'string' ? parseInt(formData.numberOfAccounts) : formData.numberOfAccounts
-    if (isNaN(accountsNum) || accountsNum < 1 || accountsNum > 50) {
-      addLog('Error: Number of accounts must be between 1 and 50.')
+    if (isNaN(accountsNum) || accountsNum < 1 || accountsNum > 10) {
+      addLog('Error: Number of accounts must be between 1 and 10.')
       return
     }
 
@@ -278,7 +267,7 @@ export default function ApexPurchaser() {
         expiryMonth: formData.expiryMonth,
         expiryYear: formData.expiryYear,
         numberOfAccounts: accountsNum,
-        selectedAccounts: formData.selectedAccounts
+        selectedAccount: formData.selectedAccount
       }
 
       addLog('Sending purchase request to backend...')
@@ -569,91 +558,52 @@ export default function ApexPurchaser() {
             <h2 className="section-title">Settings</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="form-group">
-                <label className="form-label">Number of Accounts (Auto-synced):</label>
+                <label className="form-label">Number of Accounts:</label>
                 <input
                   type="number"
                   name="numberOfAccounts"
                   value={formData.numberOfAccounts}
                   onChange={handleInputChange}
                   min="1"
-                  max="50"
+                  max="10"
                   className="form-input w-32"
-                  placeholder="1"
-                  readOnly
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Automatically matches the number of selected account types
-                </p>
               </div>
             </div>
             
             {/* Account Selection */}
             <div className="mt-6">
-              <label className="form-label">Select Account Types:</label>
-              <Select
-                isMulti
-                options={accountOptions}
-                value={accountOptions.filter(option => formData.selectedAccounts.includes(option.value))}
-                onChange={(selectedOptions) => {
-                  const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : []
-                  setFormData(prev => ({
-                    ...prev,
-                    selectedAccounts: selectedValues,
-                    numberOfAccounts: selectedValues.length // Auto-set number of accounts to match selection
-                  }))
-                }}
-                placeholder="Select account types..."
-                className="mt-2"
-                classNamePrefix="react-select"
-                styles={{
-                  control: (provided, state) => ({
-                    ...provided,
-                    minHeight: '48px',
-                    border: state.isFocused ? '2px solid #3b82f6' : '2px solid #d1d5db',
-                    borderRadius: '8px',
-                    boxShadow: state.isFocused ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none',
-                    '&:hover': {
-                      border: '2px solid #3b82f6'
-                    }
-                  }),
-                  multiValue: (provided) => ({
-                    ...provided,
-                    backgroundColor: '#dbeafe',
-                    borderRadius: '6px'
-                  }),
-                  multiValueLabel: (provided) => ({
-                    ...provided,
-                    color: '#1e40af',
-                    fontWeight: '500'
-                  }),
-                  multiValueRemove: (provided) => ({
-                    ...provided,
-                    color: '#1e40af',
-                    '&:hover': {
-                      backgroundColor: '#bfdbfe',
-                      color: '#1e3a8a'
-                    }
-                  }),
-                  placeholder: (provided) => ({
-                    ...provided,
-                    color: '#9ca3af'
-                  })
-                }}
-              />
-              <div className="mt-2 flex items-center justify-between">
-                <p className="text-sm text-gray-600">
-                  Click to select multiple account types
-                </p>
-                <span className="text-sm font-medium text-blue-600">
-                  {formData.selectedAccounts.length} selected
-                </span>
+              <label className="form-label">Select Account Type:</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+                {[
+                  { value: '25k-Tradovate', label: '25k Tradovate' },
+                  { value: '50k-Tradovate', label: '50k Tradovate' },
+                  { value: '100k-Tradovate', label: '100k Tradovate' },
+                  { value: '150k-Tradovate', label: '150k Tradovate' },
+                  { value: '250k-Tradovate', label: '250k Tradovate' },
+                  { value: '300k-Tradovate', label: '300k Tradovate' }
+                ].map((account) => (
+                  <label key={account.value} className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="selectedAccount"
+                      value={account.value}
+                      checked={formData.selectedAccount === account.value}
+                      onChange={(e) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          selectedAccount: e.target.value
+                        }))
+                      }}
+                      className="form-radio"
+                    />
+                    <span className="text-sm text-gray-700">{account.label}</span>
+                  </label>
+                ))}
               </div>
-              {formData.numberOfAccounts > 0 && (
-                <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
-                  <strong>Purchase Order:</strong> The system will purchase {formData.numberOfAccounts} accounts in this order: 
-                  {formData.selectedAccounts.map(acc => acc.replace('-Tradovate', 'k')).join(' → ')}
-                </div>
-              )}
+              <p className="text-xs text-gray-500 mt-2">
+                Selected: {formData.selectedAccount}
+              </p>
             </div>
           </div>
 
