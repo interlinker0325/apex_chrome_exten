@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import Select from 'react-select'
 import ActivityLog from './ActivityLog'
 
 interface FormData {
@@ -14,6 +15,16 @@ interface FormData {
   numberOfAccounts: number | string
   selectedAccounts: string[]
 }
+
+// Account options for react-select
+const accountOptions = [
+  { value: '25k-Tradovate', label: '25k Tradovate' },
+  { value: '50k-Tradovate', label: '50k Tradovate' },
+  { value: '100k-Tradovate', label: '100k Tradovate' },
+  { value: '150k-Tradovate', label: '150k Tradovate' },
+  { value: '250k-Tradovate', label: '250k Tradovate' },
+  { value: '300k-Tradovate', label: '300k Tradovate' }
+]
 
 export default function ApexPurchaser() {
   const [formData, setFormData] = useState<FormData>({
@@ -579,77 +590,68 @@ export default function ApexPurchaser() {
             {/* Account Selection */}
             <div className="mt-6">
               <label className="form-label">Select Account Types:</label>
-              <div className="relative">
-                <select
-                  multiple
-                  value={formData.selectedAccounts}
-                  onChange={(e) => {
-                    const selectedValues = Array.from(e.target.selectedOptions, option => option.value)
-                    setFormData(prev => ({
-                      ...prev,
-                      selectedAccounts: selectedValues,
-                      numberOfAccounts: selectedValues.length // Auto-set number of accounts to match selection
-                    }))
-                  }}
-                  className="form-input mt-2 w-full h-32 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none bg-white"
-                  style={{ backgroundImage: 'none' }}
-                >
-                  <option value="25k-Tradovate">25k Tradovate</option>
-                  <option value="50k-Tradovate">50k Tradovate</option>
-                  <option value="100k-Tradovate">100k Tradovate</option>
-                  <option value="150k-Tradovate">150k Tradovate</option>
-                  <option value="250k-Tradovate">250k Tradovate</option>
-                  <option value="300k-Tradovate">300k Tradovate</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <Select
+                isMulti
+                options={accountOptions}
+                value={accountOptions.filter(option => formData.selectedAccounts.includes(option.value))}
+                onChange={(selectedOptions) => {
+                  const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : []
+                  setFormData(prev => ({
+                    ...prev,
+                    selectedAccounts: selectedValues,
+                    numberOfAccounts: selectedValues.length // Auto-set number of accounts to match selection
+                  }))
+                }}
+                placeholder="Select account types..."
+                className="mt-2"
+                classNamePrefix="react-select"
+                styles={{
+                  control: (provided, state) => ({
+                    ...provided,
+                    minHeight: '48px',
+                    border: state.isFocused ? '2px solid #3b82f6' : '2px solid #d1d5db',
+                    borderRadius: '8px',
+                    boxShadow: state.isFocused ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none',
+                    '&:hover': {
+                      border: '2px solid #3b82f6'
+                    }
+                  }),
+                  multiValue: (provided) => ({
+                    ...provided,
+                    backgroundColor: '#dbeafe',
+                    borderRadius: '6px'
+                  }),
+                  multiValueLabel: (provided) => ({
+                    ...provided,
+                    color: '#1e40af',
+                    fontWeight: '500'
+                  }),
+                  multiValueRemove: (provided) => ({
+                    ...provided,
+                    color: '#1e40af',
+                    '&:hover': {
+                      backgroundColor: '#bfdbfe',
+                      color: '#1e3a8a'
+                    }
+                  }),
+                  placeholder: (provided) => ({
+                    ...provided,
+                    color: '#9ca3af'
+                  })
+                }}
+              />
               <div className="mt-2 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  Hold <kbd className="px-1 py-0.5 text-xs bg-gray-100 rounded">Ctrl</kbd> or <kbd className="px-1 py-0.5 text-xs bg-gray-100 rounded">Cmd</kbd> to select multiple
+                  Click to select multiple account types
                 </p>
                 <span className="text-sm font-medium text-blue-600">
                   {formData.selectedAccounts.length} selected
                 </span>
               </div>
-              {formData.selectedAccounts.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-gray-500 mb-1">Selected accounts:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {formData.selectedAccounts.map((account) => (
-                      <span
-                        key={account}
-                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                      >
-                        {account.replace('-Tradovate', 'k')}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => {
-                              const newSelectedAccounts = prev.selectedAccounts.filter(acc => acc !== account)
-                              return {
-                                ...prev,
-                                selectedAccounts: newSelectedAccounts,
-                                numberOfAccounts: newSelectedAccounts.length // Auto-update number of accounts
-                              }
-                            })
-                          }}
-                          className="ml-1 text-blue-600 hover:text-blue-800"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  {formData.numberOfAccounts > 0 && (
-                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
-                      <strong>Purchase Order:</strong> The system will purchase {formData.numberOfAccounts} accounts in this order: 
-                      {formData.selectedAccounts.map(acc => acc.replace('-Tradovate', 'k')).join(' → ')}
-                    </div>
-                  )}
+              {formData.numberOfAccounts > 0 && (
+                <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                  <strong>Purchase Order:</strong> The system will purchase {formData.numberOfAccounts} accounts in this order: 
+                  {formData.selectedAccounts.map(acc => acc.replace('-Tradovate', 'k')).join(' → ')}
                 </div>
               )}
             </div>
