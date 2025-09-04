@@ -12,6 +12,7 @@ interface FormData {
   expiryYear: string
   cvv: string
   numberOfAccounts: number | string
+  selectedAccounts: string[]
 }
 
 export default function ApexPurchaser() {
@@ -22,7 +23,8 @@ export default function ApexPurchaser() {
     expiryMonth: '1',
     expiryYear: '2024',
     cvv: '',
-    numberOfAccounts: 1
+    numberOfAccounts: 1,
+    selectedAccounts: ['50k-Tradovate'] // Default to 50k
   })
 
   const [status, setStatus] = useState<'ready' | 'processing' | 'stopped' | 'completed' | 'error'>('ready')
@@ -238,6 +240,12 @@ export default function ApexPurchaser() {
       return
     }
     
+    // Validate selected accounts
+    if (formData.selectedAccounts.length === 0) {
+      addLog('Error: Please select at least one account type.')
+      return
+    }
+    
     // Validate number of accounts
     const accountsNum = typeof formData.numberOfAccounts === 'string' ? parseInt(formData.numberOfAccounts) : formData.numberOfAccounts
     if (isNaN(accountsNum) || accountsNum < 1 || accountsNum > 10) {
@@ -258,7 +266,8 @@ export default function ApexPurchaser() {
         cvv: formData.cvv,
         expiryMonth: formData.expiryMonth,
         expiryYear: formData.expiryYear,
-        numberOfAccounts: accountsNum
+        numberOfAccounts: accountsNum,
+        selectedAccounts: formData.selectedAccounts
       }
 
       addLog('Sending purchase request to backend...')
@@ -560,6 +569,46 @@ export default function ApexPurchaser() {
                   className="form-input w-32"
                 />
               </div>
+            </div>
+            
+            {/* Account Selection */}
+            <div className="mt-6">
+              <label className="form-label">Select Account Types:</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+                {[
+                  { value: '25k-Tradovate', label: '25k Tradovate' },
+                  { value: '50k-Tradovate', label: '50k Tradovate' },
+                  { value: '100k-Tradovate', label: '100k Tradovate' },
+                  { value: '150k-Tradovate', label: '150k Tradovate' },
+                  { value: '250k-Tradovate', label: '250k Tradovate' },
+                  { value: '300k-Tradovate', label: '300k Tradovate' }
+                ].map((account) => (
+                  <label key={account.value} className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.selectedAccounts.includes(account.value)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormData(prev => ({
+                            ...prev,
+                            selectedAccounts: [...prev.selectedAccounts, account.value]
+                          }))
+                        } else {
+                          setFormData(prev => ({
+                            ...prev,
+                            selectedAccounts: prev.selectedAccounts.filter(acc => acc !== account.value)
+                          }))
+                        }
+                      }}
+                      className="form-checkbox"
+                    />
+                    <span className="text-sm text-gray-700">{account.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Selected: {formData.selectedAccounts.length} account(s) - {formData.selectedAccounts.join(', ')}
+              </p>
             </div>
           </div>
 
