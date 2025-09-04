@@ -558,16 +558,35 @@ export default function ApexPurchaser() {
             <h2 className="section-title">Settings</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="form-group">
-                <label className="form-label">Number of Accounts:</label>
-                <input
-                  type="number"
-                  name="numberOfAccounts"
-                  value={formData.numberOfAccounts}
-                  onChange={handleInputChange}
-                  min="1"
-                  max="50"
-                  className="form-input w-32"
-                />
+                <label className="form-label">Number of Accounts to Purchase:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    name="numberOfAccounts"
+                    value={formData.numberOfAccounts}
+                    onChange={handleInputChange}
+                    min="1"
+                    max="50"
+                    className="form-input w-32"
+                    placeholder="1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const suggestedCount = formData.selectedAccounts.length * 2
+                      setFormData(prev => ({
+                        ...prev,
+                        numberOfAccounts: Math.min(suggestedCount, 50)
+                      }))
+                    }}
+                    className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200"
+                  >
+                    Suggest: {formData.selectedAccounts.length * 2}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Total accounts to purchase (will cycle through selected types)
+                </p>
               </div>
             </div>
             
@@ -634,6 +653,13 @@ export default function ApexPurchaser() {
                       </span>
                     ))}
                   </div>
+                  {formData.numberOfAccounts > 0 && (
+                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                      <strong>Example:</strong> With {formData.numberOfAccounts} accounts and {formData.selectedAccounts.length} types selected, 
+                      the system will cycle through: {formData.selectedAccounts.slice(0, 3).map(acc => acc.replace('-Tradovate', 'k')).join(' → ')}
+                      {formData.selectedAccounts.length > 3 && ' → ...'} (repeating as needed)
+                    </div>
+                  )}
                 </div>
               )}
             </div>
