@@ -47,10 +47,10 @@ export default function ApexPurchaser() {
           [name]: value === '' ? '' : 1
         }))
       } else {
-        // Valid number entered
+        // Valid number entered - don't clamp during typing, only validate on submit
         setFormData(prev => ({
           ...prev,
-          [name]: Math.max(1, Math.min(10, numValue)) // Clamp between 1-10
+          [name]: numValue
         }))
       }
     } else {
@@ -248,8 +248,8 @@ export default function ApexPurchaser() {
     
     // Validate number of accounts
     const accountsNum = typeof formData.numberOfAccounts === 'string' ? parseInt(formData.numberOfAccounts) : formData.numberOfAccounts
-    if (isNaN(accountsNum) || accountsNum < 1 || accountsNum > 10) {
-      addLog('Error: Number of accounts must be between 1 and 10.')
+    if (isNaN(accountsNum) || accountsNum < 1 || accountsNum > 50) {
+      addLog('Error: Number of accounts must be between 1 and 50.')
       return
     }
 
@@ -565,7 +565,7 @@ export default function ApexPurchaser() {
                   value={formData.numberOfAccounts}
                   onChange={handleInputChange}
                   min="1"
-                  max="10"
+                  max="50"
                   className="form-input w-32"
                 />
               </div>
@@ -574,41 +574,68 @@ export default function ApexPurchaser() {
             {/* Account Selection */}
             <div className="mt-6">
               <label className="form-label">Select Account Types:</label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
-                {[
-                  { value: '25k-Tradovate', label: '25k Tradovate' },
-                  { value: '50k-Tradovate', label: '50k Tradovate' },
-                  { value: '100k-Tradovate', label: '100k Tradovate' },
-                  { value: '150k-Tradovate', label: '150k Tradovate' },
-                  { value: '250k-Tradovate', label: '250k Tradovate' },
-                  { value: '300k-Tradovate', label: '300k Tradovate' }
-                ].map((account) => (
-                  <label key={account.value} className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.selectedAccounts.includes(account.value)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData(prev => ({
-                            ...prev,
-                            selectedAccounts: [...prev.selectedAccounts, account.value]
-                          }))
-                        } else {
-                          setFormData(prev => ({
-                            ...prev,
-                            selectedAccounts: prev.selectedAccounts.filter(acc => acc !== account.value)
-                          }))
-                        }
-                      }}
-                      className="form-checkbox"
-                    />
-                    <span className="text-sm text-gray-700">{account.label}</span>
-                  </label>
-                ))}
+              <div className="relative">
+                <select
+                  multiple
+                  value={formData.selectedAccounts}
+                  onChange={(e) => {
+                    const selectedValues = Array.from(e.target.selectedOptions, option => option.value)
+                    setFormData(prev => ({
+                      ...prev,
+                      selectedAccounts: selectedValues
+                    }))
+                  }}
+                  className="form-input mt-2 w-full h-32 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none bg-white"
+                  style={{ backgroundImage: 'none' }}
+                >
+                  <option value="25k-Tradovate">25k Tradovate</option>
+                  <option value="50k-Tradovate">50k Tradovate</option>
+                  <option value="100k-Tradovate">100k Tradovate</option>
+                  <option value="150k-Tradovate">150k Tradovate</option>
+                  <option value="250k-Tradovate">250k Tradovate</option>
+                  <option value="300k-Tradovate">300k Tradovate</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Selected: {formData.selectedAccounts.length} account(s) - {formData.selectedAccounts.join(', ')}
-              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Hold <kbd className="px-1 py-0.5 text-xs bg-gray-100 rounded">Ctrl</kbd> or <kbd className="px-1 py-0.5 text-xs bg-gray-100 rounded">Cmd</kbd> to select multiple
+                </p>
+                <span className="text-sm font-medium text-blue-600">
+                  {formData.selectedAccounts.length} selected
+                </span>
+              </div>
+              {formData.selectedAccounts.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-gray-500 mb-1">Selected accounts:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {formData.selectedAccounts.map((account) => (
+                      <span
+                        key={account}
+                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {account.replace('-Tradovate', 'k')}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              selectedAccounts: prev.selectedAccounts.filter(acc => acc !== account)
+                            }))
+                          }}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
