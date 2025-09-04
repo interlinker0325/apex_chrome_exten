@@ -569,7 +569,7 @@ export default function ApexPurchaser() {
             <h2 className="section-title">Settings</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="form-group">
-                <label className="form-label">Quantity (How many accounts):</label>
+                <label className="form-label">Number of Accounts (Auto-synced):</label>
                 <input
                   type="number"
                   name="numberOfAccounts"
@@ -579,30 +579,32 @@ export default function ApexPurchaser() {
                   max="50"
                   className="form-input w-32"
                   placeholder="1"
+                  readOnly
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Enter how many accounts of the selected type you want to purchase
+                  Automatically matches the number of selected account types
                 </p>
               </div>
             </div>
             
             {/* Account Selection */}
             <div className="mt-6">
-              <label className="form-label">Select Account Type:</label>
+              <label className="form-label">Select Account Types:</label>
               <Select
+                isMulti
                 options={accountOptions}
-                value={accountOptions.find(option => formData.selectedAccounts[0] === option.value) || null}
-                onChange={(selectedOption) => {
-                  const selectedValue = selectedOption ? [selectedOption.value] : []
+                value={accountOptions.filter(option => formData.selectedAccounts.includes(option.value))}
+                onChange={(selectedOptions) => {
+                  const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : []
                   setFormData(prev => ({
                     ...prev,
-                    selectedAccounts: selectedValue
+                    selectedAccounts: selectedValues,
+                    numberOfAccounts: selectedValues.length // Auto-set number of accounts to match selection
                   }))
                 }}
-                placeholder="Select account type..."
+                placeholder="Select account types..."
                 className="mt-2"
                 classNamePrefix="react-select"
-                isClearable
                 styles={{
                   control: (provided, state) => ({
                     ...provided,
@@ -614,6 +616,24 @@ export default function ApexPurchaser() {
                       border: '2px solid #3b82f6'
                     }
                   }),
+                  multiValue: (provided) => ({
+                    ...provided,
+                    backgroundColor: '#dbeafe',
+                    borderRadius: '6px'
+                  }),
+                  multiValueLabel: (provided) => ({
+                    ...provided,
+                    color: '#1e40af',
+                    fontWeight: '500'
+                  }),
+                  multiValueRemove: (provided) => ({
+                    ...provided,
+                    color: '#1e40af',
+                    '&:hover': {
+                      backgroundColor: '#bfdbfe',
+                      color: '#1e3a8a'
+                    }
+                  }),
                   placeholder: (provided) => ({
                     ...provided,
                     color: '#9ca3af'
@@ -622,15 +642,16 @@ export default function ApexPurchaser() {
               />
               <div className="mt-2 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  Choose one account type to purchase multiple of
+                  Click to select multiple account types
                 </p>
                 <span className="text-sm font-medium text-blue-600">
-                  {formData.selectedAccounts.length > 0 ? '1 selected' : 'None selected'}
+                  {formData.selectedAccounts.length} selected
                 </span>
               </div>
-              {formData.selectedAccounts.length > 0 && formData.numberOfAccounts > 0 && (
-                <div className="mt-2 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                  <strong>Purchase Summary:</strong> You will purchase <strong>{formData.numberOfAccounts}</strong> accounts of type <strong>{formData.selectedAccounts[0].replace('-Tradovate', 'k')}</strong>
+              {formData.numberOfAccounts > 0 && (
+                <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                  <strong>Purchase Order:</strong> The system will purchase {formData.numberOfAccounts} accounts in this order: 
+                  {formData.selectedAccounts.map(acc => acc.replace('-Tradovate', 'k')).join(' → ')}
                 </div>
               )}
             </div>
