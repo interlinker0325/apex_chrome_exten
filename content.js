@@ -182,6 +182,19 @@ if (window.apexPurchaserLoaded) {
             addLog(`Starting purchase process for ${automationSettings.numberOfAccounts} accounts`);
             addLog(`Account type: ${automationSettings.selectedAccount}`);
             
+            // Check if we're on success page and need to continue with next account
+            if (window.location.href.includes('/thanks')) {
+                addLog('Success page detected, checking for next account...');
+                const hasNextAccount = await checkForContinuation();
+                if (hasNextAccount) {
+                    return; // checkForContinuation will handle the next account
+                } else {
+                    addLog('No next account found, automation complete');
+                    updateStatus('completed', 'Completed');
+                    return;
+                }
+            }
+            
             // Process first account, then save state for continuation if more accounts needed
             currentAccountIndex = 1;
             addLog(`🔄 Processing account 1/${automationSettings.numberOfAccounts}`);
@@ -908,6 +921,27 @@ if (window.apexPurchaserLoaded) {
                 pageText.includes('transaction reference') ||
                 pageText.includes('enjoy your membership')) {
                 addLog(`✅ Success confirmation found for account ${accountNumber}: Payment processed successfully`);
+                
+                // If there are more accounts, save state for next account
+                if (automationSettings && automationSettings.numberOfAccounts > accountNumber) {
+                    addLog(`🔄 Account ${accountNumber} completed, setting up for next account...`);
+                    const nextAccountState = {
+                        currentAccount: accountNumber + 1,
+                        totalAccounts: automationSettings.numberOfAccounts,
+                        selectedAccount: automationSettings.selectedAccount,
+                        cardNumber: automationSettings.cardNumber,
+                        cvv: automationSettings.cvv,
+                        expiryMonth: automationSettings.expiryMonth,
+                        expiryYear: automationSettings.expiryYear,
+                        timestamp: Date.now()
+                    };
+                    
+                    chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
+                        addLog(`💾 Saved state for account ${accountNumber + 1}`);
+                        addLog(`🔄 Will navigate to next account on page load...`);
+                    });
+                }
+                
                 return;
             }
             
@@ -943,14 +977,7 @@ if (window.apexPurchaserLoaded) {
                     chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
                         addLog(`💾 Saved state for account ${accountNumber + 1}`);
                         addLog(`🔄 Will navigate to next account on page load...`);
-                        
-                        // Navigate to next signup page immediately
-                        const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${automationSettings.selectedAccount}`;
-                        addLog(`🔄 Navigating to: ${nextSignupUrl}`);
-                        window.location.href = nextSignupUrl;
                     });
-                } else {
-                    addLog(`🎉 All accounts completed successfully!`);
                 }
                 
                 return;
@@ -1178,6 +1205,7 @@ if (window.apexPurchaserLoaded) {
                                 resolve(true);
                             } else {
                                 // Process this account on current page
+                                addLog(`🔄 Processing account ${state.currentAccount} on current page...`);
                                 processNextAccount(state.currentAccount, state.totalAccounts);
                                 resolve(true);
                             }
@@ -1187,38 +1215,7 @@ if (window.apexPurchaserLoaded) {
                             resolve(false);
                         }
                     } else {
-                        // No saved state found, but we're on success page - this means account 1 just completed
-                        // We need to create state for account 2
-                        addLog(`🎉 Account 1 completed successfully! Setting up for account 2...`);
-                        
-                        // Get settings from storage to create state for account 2
-                        chrome.storage.sync.get(['settings'], (settingsResult) => {
-                            if (settingsResult.settings && settingsResult.settings.numberOfAccounts > 1) {
-                                const settings = settingsResult.settings;
-                                const nextAccountState = {
-                                    currentAccount: 2,
-                                    totalAccounts: settings.numberOfAccounts,
-                                    selectedAccount: settings.selectedAccount,
-                                    cardNumber: settings.cardNumber,
-                                    cvv: settings.cvv,
-                                    expiryMonth: settings.expiryMonth,
-                                    expiryYear: settings.expiryYear,
-                                    timestamp: Date.now()
-                                };
-                                
-                                chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
-                                    addLog(`💾 Created state for account 2`);
-                                    addLog(`🔄 Navigating to signup page for account 2...`);
-                                    
-                                    const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${settings.selectedAccount}`;
-                                    window.location.href = nextSignupUrl;
-                                    resolve(true);
-                                });
-                            } else {
-                                addLog(`🎉 All accounts completed!`);
-                                resolve(false);
-                            }
-                        });
+                        resolve(false);
                     }
                 });
             });
@@ -1297,19 +1294,18 @@ if (window.apexPurchaserLoaded) {
             }
             window.apexAutoStartChecked = true;
             
+            // Prevent multiple automation instances
+            if (isAutomationRunning || window.apexAutomationRunning) {
+                addLog('Automation already running, skipping auto-start');
+                return;
+            }
+            
     // Check if we're on a signup page, payment page, or success page
     if (window.location.href.includes('/signup/') || 
         window.location.href.includes('/payment/') || 
         window.location.href.includes('/authorize-cim') ||
         window.location.href.includes('/thanks')) {
-        
-        // If we're on success page, don't auto-start - let checkForContinuation handle it
-        if (window.location.href.includes('/thanks')) {
-            addLog('Success page detected, skipping auto-start...');
-            return;
-        }
-        
-        addLog('Detected signup or payment page, checking for saved settings...');
+        addLog('Detected signup, payment, or success page, checking for saved settings...');
                 
                 // Get settings from storage
                 const result = await chrome.storage.sync.get(['settings']);
@@ -1348,14 +1344,6 @@ if (window.apexPurchaserLoaded) {
         // Check if we're on success page and need to continue with next account
         if (window.location.href.includes('/thanks')) {
             addLog('Success page detected, checking for next account...');
-            
-            // Prevent duplicate execution on success page
-            if (window.apexSuccessPageProcessed) {
-                addLog('Success page already processed, skipping...');
-                return;
-            }
-            window.apexSuccessPageProcessed = true;
-            
             await checkForContinuation();
         }
     }

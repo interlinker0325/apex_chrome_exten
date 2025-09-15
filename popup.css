@@ -117,6 +117,20 @@ body {
     transform: translateY(0);
 }
 
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+}
+
+.btn-danger:active {
+    transform: translateY(0);
+}
+
 .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;

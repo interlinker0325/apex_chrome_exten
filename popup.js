@@ -6,6 +6,7 @@ let isAutomationRunning = false;
 
 // DOM elements
 const startScrapingBtn = document.getElementById('startScraping');
+const stopScrapingBtn = document.getElementById('stopScraping');
 const extensionOptionsBtn = document.getElementById('extensionOptions');
 const statusElement = document.getElementById('status');
 const logsElement = document.getElementById('logs');
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Set up event listeners
     startScrapingBtn.addEventListener('click', handleStartScraping);
+    stopScrapingBtn.addEventListener('click', handleStopScraping);
     extensionOptionsBtn.addEventListener('click', openOptionsPage);
     
     // Set up real-time listeners
@@ -140,10 +142,12 @@ function updateButtonState() {
         startScrapingBtn.textContent = 'PROCESSING...';
         startScrapingBtn.disabled = true;
         startScrapingBtn.style.opacity = '0.6';
+        stopScrapingBtn.style.display = 'block';
     } else {
         startScrapingBtn.textContent = 'START SCRAPING';
         startScrapingBtn.disabled = false;
         startScrapingBtn.style.opacity = '1';
+        stopScrapingBtn.style.display = 'none';
     }
 }
 
@@ -270,6 +274,35 @@ async function handleStartScraping() {
         addLog(`Error: ${error.message}`);
         updateStatus('error', 'Error');
         isAutomationRunning = false;
+    }
+}
+
+// Handle stop scraping button click
+async function handleStopScraping() {
+    try {
+        // Get current active tab
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        if (tab) {
+            // Send stop message to content script
+            await chrome.tabs.sendMessage(tab.id, {
+                action: 'stopAutomation'
+            });
+        }
+        
+        // Clear any saved state
+        await chrome.storage.local.remove(['apexNextAccount']);
+        
+        // Update UI
+        isAutomationRunning = false;
+        updateStatus('stopped', 'Stopped');
+        addLog('Automation stopped by user');
+        updateButtonState();
+        await savePersistentState();
+        
+    } catch (error) {
+        console.error('Error stopping automation:', error);
+        addLog('Error stopping automation: ' + error.message);
     }
 }
 

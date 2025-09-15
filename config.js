@@ -3,7 +3,7 @@
 
 const CONFIG = {
     // Mandatory coupon code for APEX accounts
-    COUPON_CODE: 'SAVENOW',
+    COUPON_CODE: 'JAYPELLE',
     
     // Extension version
     VERSION: '2.0.0',
