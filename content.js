@@ -185,9 +185,44 @@ if (window.apexPurchaserLoaded) {
             // Check if we're on success page and need to continue with next account
             if (window.location.href.includes('/thanks')) {
                 addLog('Success page detected, checking for next account...');
-                const hasNextAccount = await checkForContinuation();
-                if (hasNextAccount) {
-                    return; // checkForContinuation will handle the next account
+                addLog(`Debug: Current URL = ${window.location.href}`);
+                addLog(`Debug: automationSettings = ${JSON.stringify(automationSettings)}`);
+                addLog(`Debug: numberOfAccounts = ${automationSettings?.numberOfAccounts}`);
+                
+                // If there are more accounts, save state for next account
+                if (automationSettings && automationSettings.numberOfAccounts > 1) {
+                    addLog(`🔄 Account 1 completed, setting up for next account...`);
+                    const nextAccountState = {
+                        currentAccount: 2,
+                        totalAccounts: automationSettings.numberOfAccounts,
+                        selectedAccount: automationSettings.selectedAccount,
+                        cardNumber: automationSettings.cardNumber,
+                        cvv: automationSettings.cvv,
+                        expiryMonth: automationSettings.expiryMonth,
+                        expiryYear: automationSettings.expiryYear,
+                        timestamp: Date.now()
+                    };
+                    
+                    addLog(`Debug: Saving state: ${JSON.stringify(nextAccountState)}`);
+                    
+                    chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
+                        addLog(`💾 Saved state for account 2`);
+                        addLog(`🔄 Navigating to next account...`);
+                        
+                        // Navigate to signup page for next account
+                        const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${automationSettings.selectedAccount}`;
+                        addLog(`🔄 Navigating to: ${nextSignupUrl}`);
+                        window.location.href = nextSignupUrl;
+                    });
+                    
+                    // Also try to verify the state was saved
+                    setTimeout(() => {
+                        chrome.storage.local.get(['apexNextAccount'], (result) => {
+                            addLog(`Debug: Verification - saved state = ${JSON.stringify(result.apexNextAccount)}`);
+                        });
+                    }, 1000);
+                    
+                    return; // Exit current execution, next account will be handled on page load
                 } else {
                     addLog('No next account found, automation complete');
                     updateStatus('completed', 'Completed');
@@ -1168,62 +1203,68 @@ if (window.apexPurchaserLoaded) {
         }
     }
 
-    // Check for next account to process
-    async function checkForContinuation() {
-        try {
-            return new Promise((resolve) => {
-                chrome.storage.local.get(['apexNextAccount'], (result) => {
-                    if (result.apexNextAccount) {
-                        const state = result.apexNextAccount;
-                        const timeSinceLastUpdate = Date.now() - state.timestamp;
+        // Check for next account to process
+        async function checkForContinuation() {
+            try {
+                return new Promise((resolve) => {
+                    chrome.storage.local.get(['apexNextAccount'], (result) => {
+                        addLog(`Debug: checkForContinuation - result = ${JSON.stringify(result)}`);
                         
-                        // Only continue if it's been less than 2 minutes
-                        if (timeSinceLastUpdate < 120000 && state.currentAccount <= state.totalAccounts) {
-                            addLog(`🔄 Found next account to process: ${state.currentAccount}/${state.totalAccounts}`);
+                        if (result.apexNextAccount) {
+                            const state = result.apexNextAccount;
+                            const timeSinceLastUpdate = Date.now() - state.timestamp;
                             
-                            // Set up automation settings
-                            automationSettings = {
-                                cardNumber: state.cardNumber,
-                                cvv: state.cvv,
-                                expiryMonth: state.expiryMonth,
-                                expiryYear: state.expiryYear,
-                                numberOfAccounts: state.totalAccounts,
-                                selectedAccount: state.selectedAccount,
-                                sessionId: `account-${state.currentAccount}-${Date.now()}`
-                            };
+                            addLog(`Debug: Found saved state - currentAccount: ${state.currentAccount}, totalAccounts: ${state.totalAccounts}, timeSinceLastUpdate: ${timeSinceLastUpdate}ms`);
                             
-                            currentAccountIndex = state.currentAccount;
-                            isAutomationRunning = true;
-                            window.apexAutomationRunning = true;
-                            
-                            // If we're on success page, navigate to next signup page
-                            if (window.location.href.includes('/thanks')) {
-                                addLog(`🎉 Success page detected, navigating to next account...`);
-                                const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${state.selectedAccount}`;
-                                addLog(`🔄 Navigating to: ${nextSignupUrl}`);
-                                window.location.href = nextSignupUrl;
-                                resolve(true);
+                            // Only continue if it's been less than 2 minutes
+                            if (timeSinceLastUpdate < 120000 && state.currentAccount <= state.totalAccounts) {
+                                addLog(`🔄 Found next account to process: ${state.currentAccount}/${state.totalAccounts}`);
+                                
+                                // Set up automation settings
+                                automationSettings = {
+                                    cardNumber: state.cardNumber,
+                                    cvv: state.cvv,
+                                    expiryMonth: state.expiryMonth,
+                                    expiryYear: state.expiryYear,
+                                    numberOfAccounts: state.totalAccounts,
+                                    selectedAccount: state.selectedAccount,
+                                    sessionId: `account-${state.currentAccount}-${Date.now()}`
+                                };
+                                
+                                currentAccountIndex = state.currentAccount;
+                                isAutomationRunning = true;
+                                window.apexAutomationRunning = true;
+                                
+                                // If we're on success page, navigate to next signup page
+                                if (window.location.href.includes('/thanks')) {
+                                    addLog(`🎉 Success page detected, navigating to next account...`);
+                                    const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${state.selectedAccount}`;
+                                    addLog(`🔄 Navigating to: ${nextSignupUrl}`);
+                                    window.location.href = nextSignupUrl;
+                                    resolve(true);
+                                } else {
+                                    // Process this account on current page
+                                    addLog(`🔄 Processing account ${state.currentAccount} on current page...`);
+                                    processNextAccount(state.currentAccount, state.totalAccounts);
+                                    resolve(true);
+                                }
                             } else {
-                                // Process this account on current page
-                                addLog(`🔄 Processing account ${state.currentAccount} on current page...`);
-                                processNextAccount(state.currentAccount, state.totalAccounts);
-                                resolve(true);
+                                addLog(`Debug: State too old or invalid - clearing state`);
+                                // Clear old state
+                                chrome.storage.local.remove(['apexNextAccount']);
+                                resolve(false);
                             }
                         } else {
-                            // Clear old state
-                            chrome.storage.local.remove(['apexNextAccount']);
+                            addLog(`Debug: No saved state found`);
                             resolve(false);
                         }
-                    } else {
-                        resolve(false);
-                    }
+                    });
                 });
-            });
-        } catch (error) {
-            console.error('Next account check error:', error);
-            return false;
+            } catch (error) {
+                console.error('Next account check error:', error);
+                return false;
+            }
         }
-    }
 
     // Process the next account
     async function processNextAccount(accountNumber, totalAccounts) {
