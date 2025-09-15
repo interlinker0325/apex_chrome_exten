@@ -284,10 +284,21 @@ async function handleStopScraping() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (tab) {
-            // Send stop message to content script
-            await chrome.tabs.sendMessage(tab.id, {
-                action: 'stopAutomation'
-            });
+            try {
+                // Send stop message to content script
+                const response = await chrome.tabs.sendMessage(tab.id, {
+                    action: 'stopAutomation'
+                });
+                
+                if (response && response.success) {
+                    addLog('✅ Stop command sent to content script');
+                } else {
+                    addLog('⚠️ Content script may not be responding, but stopping anyway');
+                }
+            } catch (messageError) {
+                addLog('⚠️ Could not communicate with content script, but stopping anyway');
+                console.log('Message error (expected if content script not loaded):', messageError.message);
+            }
         }
         
         // Clear any saved state
@@ -296,13 +307,18 @@ async function handleStopScraping() {
         // Update UI
         isAutomationRunning = false;
         updateStatus('stopped', 'Stopped');
-        addLog('Automation stopped by user');
+        addLog('🛑 Automation stopped by user');
         updateButtonState();
         await savePersistentState();
         
     } catch (error) {
         console.error('Error stopping automation:', error);
         addLog('Error stopping automation: ' + error.message);
+        
+        // Even if there's an error, try to stop the automation
+        isAutomationRunning = false;
+        updateStatus('stopped', 'Stopped');
+        updateButtonState();
     }
 }
 

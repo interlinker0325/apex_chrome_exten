@@ -146,10 +146,28 @@ if (window.apexPurchaserLoaded) {
 
     // Handle stop automation
     function handleStopAutomation(sendResponse) {
-        isAutomationRunning = false;
-        addLog('Automation stopped by user');
-        updateStatus('stopped', 'Stopped');
-        sendResponse({ success: true });
+        try {
+            // Stop all automation flags
+            isAutomationRunning = false;
+            window.apexAutomationRunning = false;
+            
+            // Clear any saved state for continuation
+            chrome.storage.local.remove(['apexNextAccount'], () => {
+                addLog('Cleared saved state for next account');
+            });
+            
+            // Add log and update status
+            addLog('🛑 Automation stopped by user');
+            updateStatus('stopped', 'Stopped');
+            
+            // Send response back to popup
+            sendResponse({ success: true, message: 'Automation stopped successfully' });
+            
+        } catch (error) {
+            console.error('Error stopping automation:', error);
+            addLog('Error stopping automation: ' + error.message);
+            sendResponse({ success: false, error: error.message });
+        }
     }
 
     // Check if we're on APEX dashboard or signup page
@@ -205,6 +223,12 @@ if (window.apexPurchaserLoaded) {
             // Process first account, then save state for continuation if more accounts needed
             currentAccountIndex = 1;
             addLog(`🔄 Processing account 1/${automationSettings.numberOfAccounts}`);
+            
+            // Check if automation was stopped
+            if (!isAutomationRunning || !window.apexAutomationRunning) {
+                addLog('🛑 Automation stopped, exiting...');
+                return;
+            }
             
             try {
                 // Process current account (whether on dashboard, signup, or payment page)
@@ -266,6 +290,12 @@ if (window.apexPurchaserLoaded) {
     // Process account on current page (assumes we're on signup page)
     async function processAccountOnCurrentPage(accountNumber) {
         try {
+            // Check if automation was stopped
+            if (!isAutomationRunning || !window.apexAutomationRunning) {
+                addLog('🛑 Automation stopped, exiting account processing...');
+                return;
+            }
+            
             addLog(`Processing account ${accountNumber} on current page...`);
             
             const currentUrl = window.location.href;
@@ -1192,6 +1222,12 @@ if (window.apexPurchaserLoaded) {
         // Check for next account to process
         async function checkForContinuation() {
             try {
+                // Check if automation was stopped
+                if (!isAutomationRunning || !window.apexAutomationRunning) {
+                    addLog('🛑 Automation stopped, skipping continuation check...');
+                    return false;
+                }
+                
                 return new Promise((resolve) => {
                     chrome.storage.local.get(['apexNextAccount'], (result) => {
                         addLog(`Debug: checkForContinuation - result = ${JSON.stringify(result)}`);
