@@ -17,7 +17,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Initialize form elements
 function initializeForm() {
     // Set default values
-    document.getElementById('expiryMonth').value = '03';
+    const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+    document.getElementById('expiryMonth').value = currentMonth;
     document.getElementById('numberOfAccounts').value = '1';
     
     // Set default selected account
@@ -42,8 +43,8 @@ function populateYearOptions() {
         option.value = year;
         option.textContent = year;
         
-        // Set current year + 5 as default
-        if (year === currentYear + 5) {
+        // Set current year as default
+        if (year === currentYear) {
             option.selected = true;
         }
         
@@ -157,8 +158,9 @@ async function handleSaveSettings(event) {
 function resetToDefaults() {
     // Clear all form fields
     document.getElementById('cardNumber').value = '';
-    document.getElementById('expiryMonth').value = '03';
-    document.getElementById('expiryYear').value = new Date().getFullYear() + 5;
+    const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+    document.getElementById('expiryMonth').value = currentMonth;
+    document.getElementById('expiryYear').value = new Date().getFullYear();
     document.getElementById('cvv').value = '';
     document.getElementById('numberOfAccounts').value = '1';
     

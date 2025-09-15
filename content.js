@@ -189,43 +189,15 @@ if (window.apexPurchaserLoaded) {
                 addLog(`Debug: automationSettings = ${JSON.stringify(automationSettings)}`);
                 addLog(`Debug: numberOfAccounts = ${automationSettings?.numberOfAccounts}`);
                 
-                // If there are more accounts, save state for next account
-                if (automationSettings && automationSettings.numberOfAccounts > 1) {
-                    addLog(`🔄 Account 1 completed, setting up for next account...`);
-                    const nextAccountState = {
-                        currentAccount: 2,
-                        totalAccounts: automationSettings.numberOfAccounts,
-                        selectedAccount: automationSettings.selectedAccount,
-                        cardNumber: automationSettings.cardNumber,
-                        cvv: automationSettings.cvv,
-                        expiryMonth: automationSettings.expiryMonth,
-                        expiryYear: automationSettings.expiryYear,
-                        timestamp: Date.now()
-                    };
-                    
-                    addLog(`Debug: Saving state: ${JSON.stringify(nextAccountState)}`);
-                    
-                    chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
-                        addLog(`💾 Saved state for account 2`);
-                        addLog(`🔄 Navigating to next account...`);
-                        
-                        // Navigate to signup page for next account
-                        const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${automationSettings.selectedAccount}`;
-                        addLog(`🔄 Navigating to: ${nextSignupUrl}`);
-                        window.location.href = nextSignupUrl;
-                    });
-                    
-                    // Also try to verify the state was saved
-                    setTimeout(() => {
-                        chrome.storage.local.get(['apexNextAccount'], (result) => {
-                            addLog(`Debug: Verification - saved state = ${JSON.stringify(result.apexNextAccount)}`);
-                        });
-                    }, 1000);
-                    
-                    return; // Exit current execution, next account will be handled on page load
+                // Check for continuation first
+                const hasNextAccount = await checkForContinuation();
+                if (hasNextAccount) {
+                    return; // checkForContinuation will handle the next account
                 } else {
-                    addLog('No next account found, automation complete');
+                    addLog('🎉 All accounts completed successfully!');
                     updateStatus('completed', 'Completed');
+                    isAutomationRunning = false;
+                    window.apexAutomationRunning = false;
                     return;
                 }
             }
@@ -975,6 +947,13 @@ if (window.apexPurchaserLoaded) {
                         addLog(`💾 Saved state for account ${accountNumber + 1}`);
                         addLog(`🔄 Will navigate to next account on page load...`);
                     });
+                } else {
+                    // This is the last account, mark as completed
+                    addLog(`🎉 Account ${accountNumber} completed - this was the last account!`);
+                    addLog('🎉 All accounts completed successfully!');
+                    updateStatus('completed', 'Completed');
+                    isAutomationRunning = false;
+                    window.apexAutomationRunning = false;
                 }
                 
                 return;
@@ -1013,6 +992,13 @@ if (window.apexPurchaserLoaded) {
                         addLog(`💾 Saved state for account ${accountNumber + 1}`);
                         addLog(`🔄 Will navigate to next account on page load...`);
                     });
+                } else {
+                    // This is the last account, mark as completed
+                    addLog(`🎉 Account ${accountNumber} completed - this was the last account!`);
+                    addLog('🎉 All accounts completed successfully!');
+                    updateStatus('completed', 'Completed');
+                    isAutomationRunning = false;
+                    window.apexAutomationRunning = false;
                 }
                 
                 return;
@@ -1216,8 +1202,8 @@ if (window.apexPurchaserLoaded) {
                             
                             addLog(`Debug: Found saved state - currentAccount: ${state.currentAccount}, totalAccounts: ${state.totalAccounts}, timeSinceLastUpdate: ${timeSinceLastUpdate}ms`);
                             
-                            // Only continue if it's been less than 2 minutes
-                            if (timeSinceLastUpdate < 120000 && state.currentAccount <= state.totalAccounts) {
+                            // Only continue if it's been less than 2 minutes and there are more accounts to process
+                            if (timeSinceLastUpdate < 120000 && state.currentAccount < state.totalAccounts) {
                                 addLog(`🔄 Found next account to process: ${state.currentAccount}/${state.totalAccounts}`);
                                 
                                 // Set up automation settings
@@ -1252,6 +1238,15 @@ if (window.apexPurchaserLoaded) {
                                 addLog(`Debug: State too old or invalid - clearing state`);
                                 // Clear old state
                                 chrome.storage.local.remove(['apexNextAccount']);
+                                
+                                // If we've reached the last account, mark as completed
+                                if (state.currentAccount >= state.totalAccounts) {
+                                    addLog('🎉 All accounts completed successfully!');
+                                    updateStatus('completed', 'Completed');
+                                    isAutomationRunning = false;
+                                    window.apexAutomationRunning = false;
+                                }
+                                
                                 resolve(false);
                             }
                         } else {

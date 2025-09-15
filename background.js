@@ -47,8 +47,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         chrome.storage.sync.set({
             settings: {
                 cardNumber: '',
-                expiryMonth: '03',
-                expiryYear: new Date().getFullYear() + 5,
+                expiryMonth: (new Date().getMonth() + 1).toString().padStart(2, '0'),
+                expiryYear: new Date().getFullYear(),
                 cvv: '',
                 numberOfAccounts: 1,
                 selectedAccount: '300k-Tradovate'
