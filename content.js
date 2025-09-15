@@ -16,20 +16,6 @@ if (window.apexPurchaserLoaded) {
     let automationLock = false; // Prevent multiple automation instances
     let pageLoadHandled = false; // Prevent duplicate page load handling
 
-    // Helper function to set automation state consistently
-    function setAutomationState(running, lock = null) {
-        isAutomationRunning = running;
-        automationLock = lock !== null ? lock : running;
-        window.apexAutomationRunning = running;
-
-        if (!running) {
-            // Clear session when stopping
-            currentSessionId = null;
-            automationSettings = null;
-            currentAccountIndex = 0;
-        }
-    }
-
     // Listen for messages from the extension
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log('Content script received message:', message);
@@ -119,8 +105,7 @@ if (window.apexPurchaserLoaded) {
                 return;
             }
 
-            // Set automation lock to prevent duplicate instances
-            setAutomationState(false, true);
+            automationLock = true;
 
             // Check if we're on the right page
             const isApex = isApexDashboard();
@@ -133,7 +118,7 @@ if (window.apexPurchaserLoaded) {
                 return;
             }
 
-            setAutomationState(true);
+            isAutomationRunning = true;
             automationSettings = data;
             currentSessionId = data.sessionId;
             currentAccountIndex = 0;
@@ -149,21 +134,25 @@ if (window.apexPurchaserLoaded) {
             runAutomation().catch(error => {
                 console.error('Automation error:', error);
                 addLog(`Automation error: ${error.message}`);
-                setAutomationState(false);
+                // Set automation lock to prevent duplicates
+                isAutomationRunning = false;
+                automationLock = true;
                 updateStatus('error', 'Error');
             });
 
         } catch (error) {
             console.error('Error starting automation:', error);
             addLog(`Error in handleStartAutomation: ${error.message}`);
-            setAutomationState(false);
+            isAutomationRunning = false;
+            automationLock = false;
             sendResponse({ success: false, error: error.message });
         }
     }
 
     // Handle stop automation
     function handleStopAutomation(sendResponse) {
-        setAutomationState(false);
+        isAutomationRunning = false;
+        automationLock = false;
         pageLoadHandled = false;
 
         // Clear any saved state to prevent continuation
@@ -196,11 +185,11 @@ if (window.apexPurchaserLoaded) {
     async function runAutomation() {
         try {
             // Prevent duplicate execution
-            if (window.apexAutomationRunning || isAutomationRunning || automationLock) {
+            if (window.apexAutomationRunning) {
                 addLog('Automation already running, skipping duplicate execution');
                 return;
             }
-            // State already set by setAutomationState(true) above
+            window.apexAutomationRunning = true;
 
             updateStatus('processing', 'Processing...');
             addLog(`Starting purchase process for ${automationSettings.numberOfAccounts} accounts`);
@@ -240,8 +229,8 @@ if (window.apexPurchaserLoaded) {
                 addLog(`❌ Error processing account 1: ${error.message}`);
                 updateStatus('error', `Account 1 failed: ${error.message}`);
 
-                // Reset automation flags on error
-                setAutomationState(false);
+                isAutomationRunning = false;
+                automationLock = false;
             }
 
             // Note: Success page logic in waitForConfirmation will handle completion
@@ -251,7 +240,9 @@ if (window.apexPurchaserLoaded) {
             addLog(`Automation error: ${error.message}`);
             updateStatus('error', 'Error');
         } finally {
-            setAutomationState(false);
+            isAutomationRunning = false;
+            automationLock = false;
+            window.apexAutomationRunning = false;
         }
     }
 
@@ -958,8 +949,9 @@ if (window.apexPurchaserLoaded) {
                         addLog('🧹 Cleared saved state - automation complete');
                     });
 
-                    // Reset automation flags
-                    setAutomationState(false);
+                    isAutomationRunning = false;
+                    automationLock = false;
+                    window.apexAutomationRunning = false;
                 }
 
                 return;
@@ -1003,8 +995,6 @@ if (window.apexPurchaserLoaded) {
                         chrome.storage.local.remove(['apexNextAccount'], () => {
                             addLog('🧹 Cleared saved state - automation complete');
                         });
-
-                        setAutomationState(false);
                     }
 
                     return;
@@ -1051,8 +1041,6 @@ if (window.apexPurchaserLoaded) {
                     chrome.storage.local.remove(['apexNextAccount'], () => {
                         addLog('🧹 Cleared saved state - automation complete');
                     });
-
-                    setAutomationState(false);
                 }
 
                 return;
@@ -1098,8 +1086,6 @@ if (window.apexPurchaserLoaded) {
             chrome.storage.local.remove(['apexNextAccount'], () => {
                 addLog('🧹 Cleared saved state - automation complete');
             });
-
-            setAutomationState(false);
         }
     }
 
@@ -1304,7 +1290,7 @@ if (window.apexPurchaserLoaded) {
                             addLog(`🔄 Found next account to process: ${state.currentAccount}/${state.numberOfAccounts}`);
 
                             // Set automation lock to prevent duplicates
-                            setAutomationState(false, true);
+                            automationLock = true;
 
                             // Set up automation settings
                             automationSettings = {
@@ -1318,7 +1304,9 @@ if (window.apexPurchaserLoaded) {
                             };
 
                             currentAccountIndex = state.currentAccount;
-                            setAutomationState(true);
+                            // Set automation lock to prevent duplicates
+                            automationLock = true;
+                            isAutomationRunning = true;
 
                             // If we're on success page, navigate to next signup page
                             if (window.location.href.includes('/thanks')) {
@@ -1352,7 +1340,8 @@ if (window.apexPurchaserLoaded) {
             });
         } catch (error) {
             console.error('Next account check error:', error);
-            setAutomationState(false);
+            isAutomationRunning = false;
+            automationLock = false;
             return false;
         }
     }
@@ -1403,7 +1392,8 @@ if (window.apexPurchaserLoaded) {
             } else {
                 addLog(`🎉 All accounts processed (with errors)`);
                 updateStatus('error', 'Completed with errors');
-                setAutomationState(false);
+                isAutomationRunning = false;
+                automationLock = false;
             }
         }
     }
@@ -1441,10 +1431,8 @@ if (window.apexPurchaserLoaded) {
                     addLog('Found saved settings, starting automation automatically...');
 
                     // Set automation lock to prevent duplicates
-                    setAutomationState(false, true);
-
-                    // Start automation with saved settings
-                    setAutomationState(true);
+                    automationLock = true;
+                    isAutomationRunning = true;
                     automationSettings = settings;
                     currentSessionId = 'auto-' + Date.now();
                     currentAccountIndex = 0;
@@ -1456,7 +1444,8 @@ if (window.apexPurchaserLoaded) {
                     runAutomation().catch(error => {
                         console.error('Auto-automation error:', error);
                         addLog(`Auto-automation error: ${error.message}`);
-                        setAutomationState(false);
+                        isAutomationRunning = false;
+                        automationLock = false;
                         updateStatus('error', 'Error');
                     });
                 } else {
@@ -1467,7 +1456,8 @@ if (window.apexPurchaserLoaded) {
         } catch (error) {
             console.error('Error in checkAndStartAutomation:', error);
             addLog(`Error checking for auto-start: ${error.message}`);
-            setAutomationState(false);
+            isAutomationRunning = false;
+            automationLock = false;
         }
     }
 
