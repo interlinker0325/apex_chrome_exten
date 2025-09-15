@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extension Settings - APEX Purchaser</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Extension Settings</h1>
+        </div>
+        
+        <form id="settingsForm" class="settings-form">
+            <!-- Payment Details Section -->
+            <div class="section">
+                <h2>Payment Details</h2>
+                
+                <div class="form-group">
+                    <label for="cardNumber">Card Number:</label>
+                    <input type="text" id="cardNumber" name="cardNumber" placeholder="4207 6703 2492 6842" maxlength="19">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="expiryMonth">Expiry Month:</label>
+                        <select id="expiryMonth" name="expiryMonth">
+                            <option value="01">01</option>
+                            <option value="02">02</option>
+                            <option value="03">03</option>
+                            <option value="04">04</option>
+                            <option value="05">05</option>
+                            <option value="06">06</option>
+                            <option value="07">07</option>
+                            <option value="08">08</option>
+                            <option value="09">09</option>
+                            <option value="10">10</option>
+                            <option value="11">11</option>
+                            <option value="12">12</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="expiryYear">Expiry Year:</label>
+                        <select id="expiryYear" name="expiryYear">
+                            <!-- Years will be populated by JavaScript -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cvv">CVV:</label>
+                        <input type="text" id="cvv" name="cvv" placeholder="123" maxlength="4">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings Section -->
+            <div class="section">
+                <h2>Settings</h2>
+                
+                <div class="form-group">
+                    <label for="numberOfAccounts">Number of Accounts:</label>
+                    <input type="number" id="numberOfAccounts" name="numberOfAccounts" min="1" value="1">
+                </div>
+                
+                <div class="form-group">
+                    <label>Select Account Type:</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="selectedAccount" value="25k-Tradovate">
+                            <span>25k Tradovate</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="selectedAccount" value="50k-Tradovate">
+                            <span>50k Tradovate</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="selectedAccount" value="100k-Tradovate">
+                            <span>100k Tradovate</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="selectedAccount" value="150k-Tradovate">
+                            <span>150k Tradovate</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="selectedAccount" value="250k-Tradovate">
+                            <span>250k Tradovate</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="selectedAccount" value="300k-Tradovate" checked>
+                            <span>300k Tradovate</span>
+                        </label>
+                    </div>
+                    <div class="selected-info">
+                        Selected: <span id="selectedAccountDisplay">300k-Tradovate</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="button-group">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+                <button type="button" id="defaultSettings" class="btn btn-secondary">Default Settings</button>
+            </div>
+        </form>
+        
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+    
+    <script src="options.js"></script>
+</body>
+</html>
