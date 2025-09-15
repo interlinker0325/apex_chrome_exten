@@ -16,12 +16,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load saved settings and state
     await loadSettings();
     await loadPersistentState();
-    
+
     // Set up event listeners
     startScrapingBtn.addEventListener('click', handleStartScraping);
     stopScrapingBtn.addEventListener('click', handleStopScraping);
     extensionOptionsBtn.addEventListener('click', openOptionsPage);
-    
+
     // Set up real-time listeners
     setupRealTimeListeners();
 });
@@ -44,11 +44,11 @@ async function loadPersistentState() {
         const result = await chrome.storage.local.get(['popupState']);
         if (result.popupState) {
             const state = result.popupState;
-            
+
             // Restore automation status
             isAutomationRunning = state.isAutomationRunning || false;
             sessionId = state.sessionId || null;
-            
+
             // Restore logs
             if (state.logs && state.logs.length > 0) {
                 logsElement.innerHTML = '';
@@ -60,17 +60,17 @@ async function loadPersistentState() {
                 });
                 logsElement.scrollTop = logsElement.scrollHeight;
             }
-            
+
             // Restore status
             if (state.status) {
                 updateStatus(state.status, state.statusText || getStatusText(state.status));
             } else {
                 updateStatus('ready', 'Extension ready. Configure settings and start scraping.');
             }
-            
+
             // Update button state
             updateButtonState();
-            
+
             console.log('Persistent state loaded:', state);
         } else {
             // Initialize with default state
@@ -88,7 +88,7 @@ async function savePersistentState() {
         const logs = Array.from(logsElement.children).map(entry => entry.textContent);
         const status = statusElement.className.split(' ')[1] || 'ready';
         const statusText = statusElement.textContent;
-        
+
         const state = {
             isAutomationRunning,
             sessionId,
@@ -97,7 +97,7 @@ async function savePersistentState() {
             statusText,
             timestamp: Date.now()
         };
-        
+
         await chrome.storage.local.set({ popupState: state });
     } catch (error) {
         console.error('Error saving persistent state:', error);
@@ -122,12 +122,12 @@ function setupRealTimeListeners() {
                     });
                     logsElement.scrollTop = logsElement.scrollHeight;
                 }
-                
+
                 // Update status in real-time
                 if (newState.status && newState.status !== statusElement.className.split(' ')[1]) {
                     updateStatus(newState.status, newState.statusText || getStatusText(newState.status));
                 }
-                
+
                 // Update automation running state
                 isAutomationRunning = newState.isAutomationRunning || false;
                 updateButtonState();
@@ -158,36 +158,36 @@ async function handleStartScraping() {
             addLog('Automation already running, please wait...');
             return;
         }
-        
+
         // Get settings from storage
         const result = await chrome.storage.sync.get(['settings']);
         const settings = result.settings;
-        
+
         if (!settings) {
             addLog('Error: Please configure settings first');
             openOptionsPage();
             return;
         }
-        
+
         // Validate required settings
         if (!settings.cardNumber || !settings.cvv) {
             addLog('Error: Please fill in payment details in settings');
             openOptionsPage();
             return;
         }
-        
+
         updateStatus('processing', 'Starting...');
         addLog('Starting APEX automation on current page...');
-        
+
         // Get the current active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        
+
         if (!tab) {
             addLog('Error: No active tab found');
             updateStatus('error', 'Error');
             return;
         }
-        
+
         // Check if we're on the APEX dashboard
         if (!tab.url.includes('apextraderfunding.com/member')) {
             addLog('Error: Please navigate to APEX dashboard first');
@@ -195,7 +195,7 @@ async function handleStartScraping() {
             updateStatus('error', 'Error');
             return;
         }
-        
+
         // First, inject the content script if it's not already loaded
         try {
             await chrome.scripting.executeScript({
@@ -207,10 +207,10 @@ async function handleStartScraping() {
             // Content script might already be loaded, that's okay
             console.log('Content script injection result:', error.message);
         }
-        
+
         // Wait a moment for the content script to initialize
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Test if content script is loaded
         try {
             const pingResponse = await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
@@ -232,16 +232,16 @@ async function handleStartScraping() {
             });
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
-        
+
         // Send message to content script to start automation
         try {
             isAutomationRunning = true;
             sessionId = 'content-script-' + Date.now();
-            
+
             // Update button state and save state
             updateButtonState();
             await savePersistentState();
-            
+
             const response = await chrome.tabs.sendMessage(tab.id, {
                 action: 'startAutomation',
                 data: {
@@ -249,7 +249,7 @@ async function handleStartScraping() {
                     sessionId: sessionId
                 }
             });
-            
+
             if (response && response.success) {
                 addLog('Automation started on current page');
                 updateStatus('processing', 'Processing...');
@@ -268,7 +268,7 @@ async function handleStartScraping() {
             updateButtonState();
             await savePersistentState();
         }
-        
+
     } catch (error) {
         console.error('Error starting scraping:', error);
         addLog(`Error: ${error.message}`);
@@ -282,24 +282,24 @@ async function handleStopScraping() {
     try {
         // Get current active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        
+
         if (tab) {
             // Send stop message to content script
             await chrome.tabs.sendMessage(tab.id, {
                 action: 'stopAutomation'
             });
         }
-        
+
         // Clear any saved state
         await chrome.storage.local.remove(['apexNextAccount']);
-        
+
         // Update UI
         isAutomationRunning = false;
         updateStatus('stopped', 'Stopped');
         addLog('Automation stopped by user');
         updateButtonState();
         await savePersistentState();
-        
+
     } catch (error) {
         console.error('Error stopping automation:', error);
         addLog('Error stopping automation: ' + error.message);
@@ -335,10 +335,10 @@ function addLog(message) {
     const logEntry = document.createElement('div');
     logEntry.className = 'log-entry';
     logEntry.textContent = `[${timestamp}] ${message}`;
-    
+
     logsElement.appendChild(logEntry);
     logsElement.scrollTop = logsElement.scrollHeight;
-    
+
     // Save state after adding log
     savePersistentState();
 }
@@ -347,12 +347,12 @@ function addLog(message) {
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.action === 'updateStatus') {
         updateStatus(message.status, getStatusText(message.status));
-        
+
         // Reset automation running flag when process completes
         if (['completed', 'stopped', 'error'].includes(message.status)) {
             isAutomationRunning = false;
             updateButtonState();
-            
+
             if (message.status === 'completed') {
                 addLog('✅ Process completed successfully');
             } else if (message.status === 'stopped') {
@@ -360,10 +360,10 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             } else if (message.status === 'error') {
                 addLog('❌ Process failed');
             }
-            
+
             // Save state after status change
             await savePersistentState();
-            
+
             // Reset status after delay
             setTimeout(async () => {
                 updateStatus('ready', 'Extension ready. Configure settings and start scraping.');
