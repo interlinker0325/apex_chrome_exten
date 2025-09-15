@@ -14,6 +14,8 @@ if (window.apexPurchaserLoaded) {
     let automationSettings = null;
     let currentAccountIndex = 0;
     let totalAccounts = 0;
+    let automationLock = false; // Prevent multiple automation instances
+    let pageLoadHandled = false; // Prevent duplicate page load handling
 
     // Listen for messages from the extension
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -98,11 +100,14 @@ if (window.apexPurchaserLoaded) {
             console.log('handleStartAutomation called with data:', data);
             addLog('handleStartAutomation called');
             
-            if (isAutomationRunning) {
-                addLog('Automation already running, rejecting request');
+            if (isAutomationRunning || automationLock) {
+                addLog('Automation already running or locked, rejecting request');
                 sendResponse({ success: false, error: 'Automation already running' });
                 return;
             }
+            
+            // Set automation lock to prevent duplicate instances
+            automationLock = true;
             
             // Check if we're on the right page
             const isApex = isApexDashboard();
@@ -133,6 +138,7 @@ if (window.apexPurchaserLoaded) {
                 console.error('Automation error:', error);
                 addLog(`Automation error: ${error.message}`);
                 isAutomationRunning = false;
+                automationLock = false;
                 updateStatus('error', 'Error');
             });
             
@@ -140,6 +146,7 @@ if (window.apexPurchaserLoaded) {
             console.error('Error starting automation:', error);
             addLog(`Error in handleStartAutomation: ${error.message}`);
             isAutomationRunning = false;
+            automationLock = false;
             sendResponse({ success: false, error: error.message });
         }
     }
@@ -147,6 +154,14 @@ if (window.apexPurchaserLoaded) {
     // Handle stop automation
     function handleStopAutomation(sendResponse) {
         isAutomationRunning = false;
+        automationLock = false;
+        pageLoadHandled = false;
+        
+        // Clear any saved state to prevent continuation
+        chrome.storage.local.remove(['apexNextAccount'], () => {
+            addLog('🧹 Cleared saved state - automation stopped');
+        });
+        
         addLog('Automation stopped by user');
         updateStatus('stopped', 'Stopped');
         sendResponse({ success: true });
@@ -182,6 +197,11 @@ if (window.apexPurchaserLoaded) {
             addLog(`Starting purchase process for ${automationSettings.numberOfAccounts} accounts`);
             addLog(`Account type: ${automationSettings.selectedAccount}`);
             
+            // Clear any existing state to start fresh
+            chrome.storage.local.remove(['apexNextAccount'], () => {
+                addLog('🧹 Cleared any existing state - starting fresh');
+            });
+            
             // Check if we're on success page and need to continue with next account
             if (window.location.href.includes('/thanks')) {
                 addLog('Success page detected, checking for next account...');
@@ -195,48 +215,50 @@ if (window.apexPurchaserLoaded) {
                     const nextAccountNumber = currentAccountIndex + 1;
                     addLog(`🔄 Account ${currentAccountIndex} completed, setting up for account ${nextAccountNumber}...`);
                     
-                    const nextAccountState = {
-                        currentAccount: nextAccountNumber,
-                        totalAccounts: automationSettings.numberOfAccounts,
-                        selectedAccount: automationSettings.selectedAccount,
-                        cardNumber: automationSettings.cardNumber,
-                        cvv: automationSettings.cvv,
-                        expiryMonth: automationSettings.expiryMonth,
-                        expiryYear: automationSettings.expiryYear,
-                        timestamp: Date.now()
-                    };
-                    
-                    addLog(`Debug: Saving state: ${JSON.stringify(nextAccountState)}`);
-                    
-                    chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
-                        addLog(`💾 Saved state for account ${nextAccountNumber}`);
-                        addLog(`🔄 Navigating to next account...`);
+                    // Only proceed if we haven't reached the total
+                    if (nextAccountNumber <= automationSettings.numberOfAccounts) {
+                        const nextAccountState = {
+                            currentAccount: nextAccountNumber,
+                            totalAccounts: automationSettings.numberOfAccounts,
+                            selectedAccount: automationSettings.selectedAccount,
+                            cardNumber: automationSettings.cardNumber,
+                            cvv: automationSettings.cvv,
+                            expiryMonth: automationSettings.expiryMonth,
+                            expiryYear: automationSettings.expiryYear,
+                            timestamp: Date.now()
+                        };
                         
-                        // Navigate to signup page for next account
-                        const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${automationSettings.selectedAccount}`;
-                        addLog(`🔄 Navigating to: ${nextSignupUrl}`);
-                        window.location.href = nextSignupUrl;
-                    });
-                    
-                    // Also try to verify the state was saved
-                    setTimeout(() => {
-                        chrome.storage.local.get(['apexNextAccount'], (result) => {
-                            addLog(`Debug: Verification - saved state = ${JSON.stringify(result.apexNextAccount)}`);
+                        addLog(`Debug: Saving state: ${JSON.stringify(nextAccountState)}`);
+                        
+                        chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
+                            addLog(`💾 Saved state for account ${nextAccountNumber}`);
+                            addLog(`🔄 Navigating to next account...`);
+                            
+                            // Navigate to signup page for next account
+                            const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${automationSettings.selectedAccount}`;
+                            addLog(`🔄 Navigating to: ${nextSignupUrl}`);
+                            window.location.href = nextSignupUrl;
                         });
-                    }, 1000);
-                    
-                    return; // Exit current execution, next account will be handled on page load
-                } else {
-                    addLog(`🎉 All accounts completed! (${currentAccountIndex}/${automationSettings?.numberOfAccounts})`);
-                    updateStatus('completed', 'All accounts completed!');
-                    
-                    // Clear any saved state since we're done
-                    chrome.storage.local.remove(['apexNextAccount'], () => {
-                        addLog('🧹 Cleared saved state - automation complete');
-                    });
-                    
-                    return;
+                        
+                        return; // Exit current execution, next account will be handled on page load
+                    }
                 }
+                
+                // If we reach here, all accounts are completed
+                addLog(`🎉 All accounts completed! (${currentAccountIndex}/${automationSettings?.numberOfAccounts})`);
+                updateStatus('completed', 'All accounts completed!');
+                
+                // Clear any saved state since we're done
+                chrome.storage.local.remove(['apexNextAccount'], () => {
+                    addLog('🧹 Cleared saved state - automation complete');
+                });
+                
+                // Reset flags
+                isAutomationRunning = false;
+                automationLock = false;
+                window.apexAutomationRunning = false;
+                
+                return;
             }
             
             // Process first account, then save state for continuation if more accounts needed
@@ -296,6 +318,7 @@ if (window.apexPurchaserLoaded) {
             updateStatus('error', 'Error');
         } finally {
             isAutomationRunning = false;
+            automationLock = false;
             window.apexAutomationRunning = false;
         }
     }
@@ -1231,6 +1254,12 @@ if (window.apexPurchaserLoaded) {
         // Check for next account to process
         async function checkForContinuation() {
             try {
+                // Prevent multiple continuation checks
+                if (isAutomationRunning || automationLock) {
+                    addLog('Automation already running, skipping continuation check');
+                    return false;
+                }
+                
                 return new Promise((resolve) => {
                     chrome.storage.local.get(['apexNextAccount'], (result) => {
                         addLog(`Debug: checkForContinuation - result = ${JSON.stringify(result)}`);
@@ -1241,9 +1270,12 @@ if (window.apexPurchaserLoaded) {
                             
                             addLog(`Debug: Found saved state - currentAccount: ${state.currentAccount}, totalAccounts: ${state.totalAccounts}, timeSinceLastUpdate: ${timeSinceLastUpdate}ms`);
                             
-                            // Only continue if it's been less than 2 minutes
+                            // Only continue if it's been less than 2 minutes and we haven't exceeded total accounts
                             if (timeSinceLastUpdate < 120000 && state.currentAccount <= state.totalAccounts) {
                                 addLog(`🔄 Found next account to process: ${state.currentAccount}/${state.totalAccounts}`);
+                                
+                                // Set automation lock to prevent duplicates
+                                automationLock = true;
                                 
                                 // Set up automation settings
                                 automationSettings = {
@@ -1287,6 +1319,7 @@ if (window.apexPurchaserLoaded) {
                 });
             } catch (error) {
                 console.error('Next account check error:', error);
+                automationLock = false;
                 return false;
             }
         }
@@ -1331,6 +1364,7 @@ if (window.apexPurchaserLoaded) {
                 addLog('🎉 All accounts processed successfully!');
                 updateStatus('completed', 'Completed');
                 isAutomationRunning = false;
+                automationLock = false;
                 window.apexAutomationRunning = false;
             }
             
@@ -1345,6 +1379,7 @@ if (window.apexPurchaserLoaded) {
                 chrome.storage.local.remove(['apexNextAccount']);
                 updateStatus('error', 'Completed with errors');
                 isAutomationRunning = false;
+                automationLock = false;
                 window.apexAutomationRunning = false;
             }
         }
@@ -1355,14 +1390,16 @@ if (window.apexPurchaserLoaded) {
     async function checkAndStartAutomation() {
         try {
             // Prevent duplicate auto-start
-            if (window.apexAutoStartChecked) {
+            if (window.apexAutoStartChecked || pageLoadHandled) {
+                addLog('Auto-start already checked or page load already handled, skipping');
                 return;
             }
             window.apexAutoStartChecked = true;
+            pageLoadHandled = true;
             
             // Prevent multiple automation instances
-            if (isAutomationRunning || window.apexAutomationRunning) {
-                addLog('Automation already running, skipping auto-start');
+            if (isAutomationRunning || window.apexAutomationRunning || automationLock) {
+                addLog('Automation already running or locked, skipping auto-start');
                 return;
             }
             
@@ -1380,6 +1417,9 @@ if (window.apexPurchaserLoaded) {
                 if (settings && settings.cardNumber && settings.cvv) {
                     addLog('Found saved settings, starting automation automatically...');
                     
+                    // Set automation lock to prevent duplicates
+                    automationLock = true;
+                    
                     // Start automation with saved settings
                     isAutomationRunning = true;
                     automationSettings = settings;
@@ -1395,6 +1435,7 @@ if (window.apexPurchaserLoaded) {
                         console.error('Auto-automation error:', error);
                         addLog(`Auto-automation error: ${error.message}`);
                         isAutomationRunning = false;
+                        automationLock = false;
                         updateStatus('error', 'Error');
                     });
                 } else {
@@ -1405,43 +1446,58 @@ if (window.apexPurchaserLoaded) {
         } catch (error) {
             console.error('Error in checkAndStartAutomation:', error);
             addLog(`Error checking for auto-start: ${error.message}`);
-        }
-        
-        // Check if we're on success page and need to continue with next account
-        if (window.location.href.includes('/thanks')) {
-            addLog('Success page detected, checking for next account...');
-            await checkForContinuation();
+            automationLock = false;
         }
     }
 
     // Run when page loads
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
+            if (!pageLoadHandled) {
+                addApexIndicator();
+                // Wait a bit for page to fully load, then check for continuation first
+                setTimeout(async () => {
+                    if (pageLoadHandled) {
+                        addLog('Page load already handled, skipping');
+                        return;
+                    }
+                    
+                    addLog(`🔍 Debug: Page loaded, checking for continuation...`);
+                    const continuationFound = await checkForContinuation();
+                    addLog(`🔍 Debug: Continuation found: ${continuationFound}`);
+                    
+                    // Only check auto-start if no continuation was found and no automation running
+                    if (!continuationFound && !isAutomationRunning && !automationLock) {
+                        addLog(`🔍 Debug: No continuation found, checking auto-start...`);
+                        checkAndStartAutomation();
+                    } else {
+                        addLog(`🔍 Debug: Skipping auto-start - continuation: ${continuationFound}, running: ${isAutomationRunning}, locked: ${automationLock}`);
+                    }
+                }, 2000);
+            }
+        });
+    } else {
+        if (!pageLoadHandled) {
             addApexIndicator();
             // Wait a bit for page to fully load, then check for continuation first
             setTimeout(async () => {
+                if (pageLoadHandled) {
+                    addLog('Page load already handled, skipping');
+                    return;
+                }
+                
                 addLog(`🔍 Debug: Page loaded, checking for continuation...`);
                 const continuationFound = await checkForContinuation();
                 addLog(`🔍 Debug: Continuation found: ${continuationFound}`);
-                // Only check auto-start if no continuation was found
-                if (!continuationFound && !isAutomationRunning) {
+                
+                // Only check auto-start if no continuation was found and no automation running
+                if (!continuationFound && !isAutomationRunning && !automationLock) {
                     addLog(`🔍 Debug: No continuation found, checking auto-start...`);
                     checkAndStartAutomation();
+                } else {
+                    addLog(`🔍 Debug: Skipping auto-start - continuation: ${continuationFound}, running: ${isAutomationRunning}, locked: ${automationLock}`);
                 }
             }, 2000);
-        });
-    } else {
-        addApexIndicator();
-        // Wait a bit for page to fully load, then check for continuation first
-        setTimeout(async () => {
-            addLog(`🔍 Debug: Page loaded, checking for continuation...`);
-            const continuationFound = await checkForContinuation();
-            addLog(`🔍 Debug: Continuation found: ${continuationFound}`);
-            // Only check auto-start if no continuation was found
-            if (!continuationFound && !isAutomationRunning) {
-                addLog(`🔍 Debug: No continuation found, checking auto-start...`);
-                checkAndStartAutomation();
-            }
-        }, 2000);
+        }
     }
 }
