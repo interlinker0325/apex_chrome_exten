@@ -146,28 +146,10 @@ if (window.apexPurchaserLoaded) {
 
     // Handle stop automation
     function handleStopAutomation(sendResponse) {
-        try {
-            // Stop all automation flags
-            isAutomationRunning = false;
-            window.apexAutomationRunning = false;
-            
-            // Clear any saved state for continuation
-            chrome.storage.local.remove(['apexNextAccount'], () => {
-                addLog('Cleared saved state for next account');
-            });
-            
-            // Add log and update status
-            addLog('🛑 Automation stopped by user');
-            updateStatus('stopped', 'Stopped');
-            
-            // Send response back to popup
-            sendResponse({ success: true, message: 'Automation stopped successfully' });
-            
-        } catch (error) {
-            console.error('Error stopping automation:', error);
-            addLog('Error stopping automation: ' + error.message);
-            sendResponse({ success: false, error: error.message });
-        }
+        isAutomationRunning = false;
+        addLog('Automation stopped by user');
+        updateStatus('stopped', 'Stopped');
+        sendResponse({ success: true });
     }
 
     // Check if we're on APEX dashboard or signup page
@@ -206,16 +188,53 @@ if (window.apexPurchaserLoaded) {
                 addLog(`Debug: Current URL = ${window.location.href}`);
                 addLog(`Debug: automationSettings = ${JSON.stringify(automationSettings)}`);
                 addLog(`Debug: numberOfAccounts = ${automationSettings?.numberOfAccounts}`);
+                addLog(`Debug: currentAccountIndex = ${currentAccountIndex}`);
                 
-                // Check for continuation first
-                const hasNextAccount = await checkForContinuation();
-                if (hasNextAccount) {
-                    return; // checkForContinuation will handle the next account
+                // Check if there are more accounts to process
+                if (automationSettings && currentAccountIndex < automationSettings.numberOfAccounts) {
+                    const nextAccountNumber = currentAccountIndex + 1;
+                    addLog(`🔄 Account ${currentAccountIndex} completed, setting up for account ${nextAccountNumber}...`);
+                    
+                    const nextAccountState = {
+                        currentAccount: nextAccountNumber,
+                        totalAccounts: automationSettings.numberOfAccounts,
+                        selectedAccount: automationSettings.selectedAccount,
+                        cardNumber: automationSettings.cardNumber,
+                        cvv: automationSettings.cvv,
+                        expiryMonth: automationSettings.expiryMonth,
+                        expiryYear: automationSettings.expiryYear,
+                        timestamp: Date.now()
+                    };
+                    
+                    addLog(`Debug: Saving state: ${JSON.stringify(nextAccountState)}`);
+                    
+                    chrome.storage.local.set({ 'apexNextAccount': nextAccountState }, () => {
+                        addLog(`💾 Saved state for account ${nextAccountNumber}`);
+                        addLog(`🔄 Navigating to next account...`);
+                        
+                        // Navigate to signup page for next account
+                        const nextSignupUrl = `https://dashboard.apextraderfunding.com/signup/${automationSettings.selectedAccount}`;
+                        addLog(`🔄 Navigating to: ${nextSignupUrl}`);
+                        window.location.href = nextSignupUrl;
+                    });
+                    
+                    // Also try to verify the state was saved
+                    setTimeout(() => {
+                        chrome.storage.local.get(['apexNextAccount'], (result) => {
+                            addLog(`Debug: Verification - saved state = ${JSON.stringify(result.apexNextAccount)}`);
+                        });
+                    }, 1000);
+                    
+                    return; // Exit current execution, next account will be handled on page load
                 } else {
-                    addLog('🎉 All accounts completed successfully!');
-                    updateStatus('completed', 'Completed');
-                    isAutomationRunning = false;
-                    window.apexAutomationRunning = false;
+                    addLog(`🎉 All accounts completed! (${currentAccountIndex}/${automationSettings?.numberOfAccounts})`);
+                    updateStatus('completed', 'All accounts completed!');
+                    
+                    // Clear any saved state since we're done
+                    chrome.storage.local.remove(['apexNextAccount'], () => {
+                        addLog('🧹 Cleared saved state - automation complete');
+                    });
+                    
                     return;
                 }
             }
@@ -223,12 +242,6 @@ if (window.apexPurchaserLoaded) {
             // Process first account, then save state for continuation if more accounts needed
             currentAccountIndex = 1;
             addLog(`🔄 Processing account 1/${automationSettings.numberOfAccounts}`);
-            
-            // Check if automation was stopped
-            if (!isAutomationRunning || !window.apexAutomationRunning) {
-                addLog('🛑 Automation stopped, exiting...');
-                return;
-            }
             
             try {
                 // Process current account (whether on dashboard, signup, or payment page)
@@ -290,12 +303,6 @@ if (window.apexPurchaserLoaded) {
     // Process account on current page (assumes we're on signup page)
     async function processAccountOnCurrentPage(accountNumber) {
         try {
-            // Check if automation was stopped
-            if (!isAutomationRunning || !window.apexAutomationRunning) {
-                addLog('🛑 Automation stopped, exiting account processing...');
-                return;
-            }
-            
             addLog(`Processing account ${accountNumber} on current page...`);
             
             const currentUrl = window.location.href;
@@ -978,12 +985,13 @@ if (window.apexPurchaserLoaded) {
                         addLog(`🔄 Will navigate to next account on page load...`);
                     });
                 } else {
-                    // This is the last account, mark as completed
-                    addLog(`🎉 Account ${accountNumber} completed - this was the last account!`);
-                    addLog('🎉 All accounts completed successfully!');
-                    updateStatus('completed', 'Completed');
-                    isAutomationRunning = false;
-                    window.apexAutomationRunning = false;
+                    addLog(`🎉 All accounts completed! (${accountNumber}/${automationSettings?.numberOfAccounts})`);
+                    updateStatus('completed', 'All accounts completed!');
+                    
+                    // Clear any saved state since we're done
+                    chrome.storage.local.remove(['apexNextAccount'], () => {
+                        addLog('🧹 Cleared saved state - automation complete');
+                    });
                 }
                 
                 return;
@@ -1023,12 +1031,13 @@ if (window.apexPurchaserLoaded) {
                         addLog(`🔄 Will navigate to next account on page load...`);
                     });
                 } else {
-                    // This is the last account, mark as completed
-                    addLog(`🎉 Account ${accountNumber} completed - this was the last account!`);
-                    addLog('🎉 All accounts completed successfully!');
-                    updateStatus('completed', 'Completed');
-                    isAutomationRunning = false;
-                    window.apexAutomationRunning = false;
+                    addLog(`🎉 All accounts completed! (${accountNumber}/${automationSettings?.numberOfAccounts})`);
+                    updateStatus('completed', 'All accounts completed!');
+                    
+                    // Clear any saved state since we're done
+                    chrome.storage.local.remove(['apexNextAccount'], () => {
+                        addLog('🧹 Cleared saved state - automation complete');
+                    });
                 }
                 
                 return;
@@ -1222,12 +1231,6 @@ if (window.apexPurchaserLoaded) {
         // Check for next account to process
         async function checkForContinuation() {
             try {
-                // Check if automation was stopped
-                if (!isAutomationRunning || !window.apexAutomationRunning) {
-                    addLog('🛑 Automation stopped, skipping continuation check...');
-                    return false;
-                }
-                
                 return new Promise((resolve) => {
                     chrome.storage.local.get(['apexNextAccount'], (result) => {
                         addLog(`Debug: checkForContinuation - result = ${JSON.stringify(result)}`);
@@ -1238,8 +1241,8 @@ if (window.apexPurchaserLoaded) {
                             
                             addLog(`Debug: Found saved state - currentAccount: ${state.currentAccount}, totalAccounts: ${state.totalAccounts}, timeSinceLastUpdate: ${timeSinceLastUpdate}ms`);
                             
-                            // Only continue if it's been less than 2 minutes and there are more accounts to process
-                            if (timeSinceLastUpdate < 120000 && state.currentAccount < state.totalAccounts) {
+                            // Only continue if it's been less than 2 minutes
+                            if (timeSinceLastUpdate < 120000 && state.currentAccount <= state.totalAccounts) {
                                 addLog(`🔄 Found next account to process: ${state.currentAccount}/${state.totalAccounts}`);
                                 
                                 // Set up automation settings
@@ -1274,15 +1277,6 @@ if (window.apexPurchaserLoaded) {
                                 addLog(`Debug: State too old or invalid - clearing state`);
                                 // Clear old state
                                 chrome.storage.local.remove(['apexNextAccount']);
-                                
-                                // If we've reached the last account, mark as completed
-                                if (state.currentAccount >= state.totalAccounts) {
-                                    addLog('🎉 All accounts completed successfully!');
-                                    updateStatus('completed', 'Completed');
-                                    isAutomationRunning = false;
-                                    window.apexAutomationRunning = false;
-                                }
-                                
                                 resolve(false);
                             }
                         } else {
