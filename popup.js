@@ -1,376 +1,305 @@
-// Popup script for APEX Purchaser Chrome Extension
-// This script now works directly with content.js for all automation
+// APEX Purchaser Chrome Extension - Popup Script
+// Simple, clean implementation
 
-let sessionId = null;
-let isAutomationRunning = false;
+// Prevent duplicate loading
+if (window.apexPurchaserLoaded) {
+    console.log('APEX Purchaser popup already loaded, skipping...');
+} else {
+    window.apexPurchaserLoaded = true;
 
-// DOM elements
-const startScrapingBtn = document.getElementById('startScraping');
-const stopScrapingBtn = document.getElementById('stopScraping');
-const extensionOptionsBtn = document.getElementById('extensionOptions');
-const statusElement = document.getElementById('status');
-const logsElement = document.getElementById('logs');
-
-// Initialize popup
-document.addEventListener('DOMContentLoaded', async () => {
-    // Load saved settings and state
-    await loadSettings();
-    await loadPersistentState();
-
-    // Set up event listeners
-    startScrapingBtn.addEventListener('click', handleStartScraping);
-    stopScrapingBtn.addEventListener('click', handleStopScraping);
-    extensionOptionsBtn.addEventListener('click', openOptionsPage);
-
-    // Set up real-time listeners
-    setupRealTimeListeners();
-});
-
-// Load settings from storage
-async function loadSettings() {
-    try {
-        const result = await chrome.storage.sync.get(['settings']);
-        if (result.settings) {
-            console.log('Settings loaded:', result.settings);
+    class ApexPurchaser {
+        constructor() {
+            this.isRunning = false;
+            this.sessionId = null;
+            this.currentAccount = 0;
+            this.totalAccounts = 0;
+            this.init();
         }
-    } catch (error) {
-        console.error('Error loading settings:', error);
-    }
-}
 
-// Load persistent state from storage
-async function loadPersistentState() {
-    try {
-        const result = await chrome.storage.local.get(['popupState']);
-        if (result.popupState) {
-            const state = result.popupState;
+        init() {
+            this.loadSettings();
+            this.setupEventListeners();
+            this.updateUI();
+        }
 
-            // Restore automation status
-            isAutomationRunning = state.isAutomationRunning || false;
-            sessionId = state.sessionId || null;
+        setupEventListeners() {
+            // Prevent duplicate listeners
+            if (this.eventListenersAdded) return;
+            this.eventListenersAdded = true;
 
-            // Restore logs
-            if (state.logs && state.logs.length > 0) {
-                logsElement.innerHTML = '';
-                state.logs.forEach(log => {
-                    const logEntry = document.createElement('div');
-                    logEntry.className = 'log-entry';
-                    logEntry.textContent = log;
-                    logsElement.appendChild(logEntry);
-                });
-                logsElement.scrollTop = logsElement.scrollHeight;
+            document.getElementById('startBtn').addEventListener('click', () => this.startAutomation());
+            document.getElementById('stopBtn').addEventListener('click', () => this.stopAutomation());
+            document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
+            document.getElementById('clearBtn').addEventListener('click', () => this.clearProgress());
+
+            // Auto-save settings on change
+            const inputs = document.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                input.addEventListener('change', () => this.saveSettings());
+            });
+
+            // Listen for progress updates from content script
+            chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+                if (request.action === 'progressUpdate') {
+                    this.updateProgress(request.currentAccount, request.totalAccounts);
+                } else if (request.action === 'log') {
+                    this.addLog(request.message, request.type);
+                }
+            });
+        }
+
+        loadSettings() {
+            chrome.storage.sync.get(['apexSettings'], (result) => {
+                if (result.apexSettings) {
+                    const settings = result.apexSettings;
+                    document.getElementById('cardNumber').value = settings.cardNumber || '';
+                    document.getElementById('expiryMonth').value = settings.expiryMonth || '09';
+                    document.getElementById('expiryYear').value = settings.expiryYear || '2025';
+                    document.getElementById('cvv').value = settings.cvv || '';
+                    document.getElementById('accountType').value = settings.accountType || '25k-Tradovate';
+                    document.getElementById('numberOfAccounts').value = settings.numberOfAccounts || 1;
+                }
+            });
+        }
+
+        saveSettings() {
+            const settings = {
+                cardNumber: document.getElementById('cardNumber').value,
+                expiryMonth: document.getElementById('expiryMonth').value,
+                expiryYear: document.getElementById('expiryYear').value,
+                cvv: document.getElementById('cvv').value,
+                accountType: document.getElementById('accountType').value,
+                numberOfAccounts: parseInt(document.getElementById('numberOfAccounts').value)
+            };
+
+            chrome.storage.sync.set({ apexSettings: settings });
+            this.addLog('Settings saved');
+        }
+
+        async startAutomation() {
+            if (this.isRunning) {
+                this.addLog('Automation already running');
+                return;
             }
 
-            // Restore status
-            if (state.status) {
-                updateStatus(state.status, state.statusText || getStatusText(state.status));
-            } else {
-                updateStatus('ready', 'Extension ready. Configure settings and start scraping.');
+            // Validate settings
+            if (!this.validateSettings()) {
+                return;
             }
 
-            // Update button state
-            updateButtonState();
+            try {
+                this.isRunning = true;
+                this.currentAccount = 0;
+                this.totalAccounts = parseInt(document.getElementById('numberOfAccounts').value);
+                this.updateUI();
+                this.addLog('Starting APEX automation...');
 
-            console.log('Persistent state loaded:', state);
-        } else {
-            // Initialize with default state
-            updateStatus('ready', 'Extension ready. Configure settings and start scraping.');
-        }
-    } catch (error) {
-        console.error('Error loading persistent state:', error);
-        updateStatus('ready', 'Extension ready. Configure settings and start scraping.');
-    }
-}
+                // Get current tab
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-// Save persistent state to storage
-async function savePersistentState() {
-    try {
-        const logs = Array.from(logsElement.children).map(entry => entry.textContent);
-        const status = statusElement.className.split(' ')[1] || 'ready';
-        const statusText = statusElement.textContent;
+                if (!tab) {
+                    throw new Error('No active tab found');
+                }
 
-        const state = {
-            isAutomationRunning,
-            sessionId,
-            logs,
-            status,
-            statusText,
-            timestamp: Date.now()
-        };
+                // Ensure we're on the member page where content script is injected
+                if (!tab.url.includes('apextraderfunding.com/member')) {
+                    this.addLog('Navigating to member page...');
+                    await chrome.tabs.update(tab.id, { url: 'https://dashboard.apextraderfunding.com/member' });
 
-        await chrome.storage.local.set({ popupState: state });
-    } catch (error) {
-        console.error('Error saving persistent state:', error);
-    }
-}
+                    // Wait for navigation and content script to load
+                    await this.waitForPageAndContentScript(tab.id);
+                }
 
-// Set up real-time listeners for state updates
-function setupRealTimeListeners() {
-    // Listen for storage changes (from content script)
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'local' && changes.popupState) {
-            const newState = changes.popupState.newValue;
-            if (newState) {
-                // Update logs in real-time
-                if (newState.logs && newState.logs.length > logsElement.children.length) {
-                    const currentLogCount = logsElement.children.length;
-                    newState.logs.slice(currentLogCount).forEach(log => {
-                        const logEntry = document.createElement('div');
-                        logEntry.className = 'log-entry';
-                        logEntry.textContent = log;
-                        logsElement.appendChild(logEntry);
+                // Send automation data
+                const settings = this.getSettings();
+
+                try {
+                    // Send message to content script
+                    const response = await chrome.tabs.sendMessage(tab.id, {
+                        action: 'startAutomation',
+                        data: settings
                     });
-                    logsElement.scrollTop = logsElement.scrollHeight;
+
+                    if (response && response.success) {
+                        this.addLog('Automation started successfully');
+                        this.updateStatus('processing', 'Running...');
+                    } else {
+                        throw new Error(response?.error || 'Failed to start automation');
+                    }
+                } catch (messageError) {
+                    this.addLog(`Error: ${messageError.message}`, 'error');
+                    this.isRunning = false;
+                    this.updateUI();
                 }
 
-                // Update status in real-time
-                if (newState.status && newState.status !== statusElement.className.split(' ')[1]) {
-                    updateStatus(newState.status, newState.statusText || getStatusText(newState.status));
-                }
-
-                // Update automation running state
-                isAutomationRunning = newState.isAutomationRunning || false;
-                updateButtonState();
+            } catch (error) {
+                this.addLog(`Error: ${error.message}`, 'error');
+                this.isRunning = false;
+                this.updateUI();
             }
         }
+
+        async stopAutomation() {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab) {
+                    await chrome.tabs.sendMessage(tab.id, { action: 'stopAutomation' });
+                }
+            } catch (error) {
+                console.log('Error stopping automation:', error);
+            }
+
+            this.isRunning = false;
+            this.updateUI();
+            this.addLog('Automation stopped');
+            this.updateStatus('ready', 'Ready');
+        }
+
+        async waitForPageAndContentScript(tabId) {
+            const maxAttempts = 10;
+            const delay = 1000;
+
+            for (let i = 0; i < maxAttempts; i++) {
+                try {
+                    // Wait for page to load
+                    await new Promise(resolve => setTimeout(resolve, delay));
+
+                    // Check if content script is ready
+                    const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+                    if (response && response.success) {
+                        this.addLog('Content script is ready');
+                        return;
+                    }
+                } catch (error) {
+                    // Content script not ready yet, continue waiting
+                }
+            }
+
+            this.addLog('Content script ready timeout, proceeding anyway...');
+        }
+
+
+        validateSettings() {
+            const cardNumber = document.getElementById('cardNumber').value.trim();
+            const cvv = document.getElementById('cvv').value.trim();
+            const numberOfAccounts = parseInt(document.getElementById('numberOfAccounts').value);
+
+            if (!cardNumber) {
+                this.addLog('Please enter card number', 'error');
+                return false;
+            }
+
+            if (!cvv) {
+                this.addLog('Please enter CVV', 'error');
+                return false;
+            }
+
+            if (numberOfAccounts < 1 || numberOfAccounts > 10) {
+                this.addLog('Number of accounts must be between 1 and 10', 'error');
+                return false;
+            }
+
+            return true;
+        }
+
+        getSettings() {
+            return {
+                cardNumber: document.getElementById('cardNumber').value.trim(),
+                expiryMonth: document.getElementById('expiryMonth').value,
+                expiryYear: document.getElementById('expiryYear').value,
+                cvv: document.getElementById('cvv').value.trim(),
+                accountType: document.getElementById('accountType').value,
+                numberOfAccounts: parseInt(document.getElementById('numberOfAccounts').value),
+                sessionId: 'session-' + Date.now()
+            };
+        }
+
+        updateUI() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+
+            if (this.isRunning) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+
+        updateStatus(status, text) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = text;
+            statusEl.className = `status ${status}`;
+        }
+
+        addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Keep only last 50 log entries
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        openSettings() {
+            chrome.tabs.create({ url: 'options.html' });
+        }
+
+        updateProgress(current, total) {
+            this.currentAccount = current;
+            this.totalAccounts = total;
+
+            const progressText = document.getElementById('progressText');
+            const progressFill = document.getElementById('progressFill');
+            const progressSection = document.getElementById('progressSection');
+
+            if (current > 0 && total > 0) {
+                progressText.textContent = `Processing account ${current} of ${total}`;
+                const percentage = ((current - 1) / total) * 100;
+                progressFill.style.width = `${percentage}%`;
+                progressSection.style.display = 'block';
+            } else {
+                progressSection.style.display = 'none';
+            }
+        }
+
+        clearProgress() {
+            this.isRunning = false;
+            this.currentAccount = 0;
+            this.totalAccounts = 0;
+
+            // Hide progress section
+            document.getElementById('progressSection').style.display = 'none';
+
+            // Reset progress bar
+            document.getElementById('progressFill').style.width = '0%';
+
+            // Update UI
+            this.updateUI();
+
+            // Clear logs
+            document.getElementById('logContainer').innerHTML = '<div class="log-entry">Extension ready. Configure settings and start automation.</div>';
+
+            // Stop automation in content script
+            this.stopAutomation();
+
+            this.addLog('Progress cleared - ready to restart');
+            this.updateStatus('ready', 'Ready');
+        }
+    }
+
+    // Initialize when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        new ApexPurchaser();
     });
-}
 
-// Update button state based on automation status
-function updateButtonState() {
-    if (isAutomationRunning) {
-        startScrapingBtn.textContent = 'PROCESSING...';
-        startScrapingBtn.disabled = true;
-        startScrapingBtn.style.opacity = '0.6';
-        stopScrapingBtn.style.display = 'block';
-    } else {
-        startScrapingBtn.textContent = 'START SCRAPING';
-        startScrapingBtn.disabled = false;
-        startScrapingBtn.style.opacity = '1';
-        stopScrapingBtn.style.display = 'none';
-    }
-}
-
-// Handle start scraping button click
-async function handleStartScraping() {
-    try {
-        if (isAutomationRunning) {
-            addLog('Automation already running, please wait...');
-            return;
-        }
-
-        // Get settings from storage
-        const result = await chrome.storage.sync.get(['settings']);
-        const settings = result.settings;
-
-        if (!settings) {
-            addLog('Error: Please configure settings first');
-            openOptionsPage();
-            return;
-        }
-
-        // Validate required settings
-        if (!settings.cardNumber || !settings.cvv) {
-            addLog('Error: Please fill in payment details in settings');
-            openOptionsPage();
-            return;
-        }
-
-        updateStatus('processing', 'Starting...');
-        addLog('Starting APEX automation on current page...');
-
-        // Get the current active tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-        if (!tab) {
-            addLog('Error: No active tab found');
-            updateStatus('error', 'Error');
-            return;
-        }
-
-        // Check if we're on the APEX dashboard
-        if (!tab.url.includes('apextraderfunding.com/member')) {
-            addLog('Error: Please navigate to APEX dashboard first');
-            addLog('Go to: https://dashboard.apextraderfunding.com/member/');
-            updateStatus('error', 'Error');
-            return;
-        }
-
-        // First, inject the content script if it's not already loaded
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content.js']
-            });
-            addLog('Content script injected');
-        } catch (error) {
-            // Content script might already be loaded, that's okay
-            console.log('Content script injection result:', error.message);
-        }
-
-        // Wait a moment for the content script to initialize
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Test if content script is loaded
-        try {
-            const pingResponse = await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
-            if (pingResponse && pingResponse.success) {
-                addLog('Content script is ready');
-            } else {
-                addLog('Content script not responding, trying to inject...');
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ['content.js']
-                });
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-        } catch (error) {
-            addLog('Content script not loaded, injecting...');
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content.js']
-            });
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-
-        // Send message to content script to start automation
-        try {
-            isAutomationRunning = true;
-            sessionId = 'content-script-' + Date.now();
-
-            // Update button state and save state
-            updateButtonState();
-            await savePersistentState();
-
-            const response = await chrome.tabs.sendMessage(tab.id, {
-                action: 'startAutomation',
-                data: {
-                    ...settings,
-                    sessionId: sessionId
-                }
-            });
-
-            if (response && response.success) {
-                addLog('Automation started on current page');
-                updateStatus('processing', 'Processing...');
-            } else {
-                addLog(`Error: ${response ? response.error : 'No response from content script'}`);
-                updateStatus('error', 'Error');
-                isAutomationRunning = false;
-                updateButtonState();
-                await savePersistentState();
-            }
-        } catch (error) {
-            addLog(`Error starting automation: ${error.message}`);
-            addLog('Please refresh the page and try again');
-            updateStatus('error', 'Error');
-            isAutomationRunning = false;
-            updateButtonState();
-            await savePersistentState();
-        }
-
-    } catch (error) {
-        console.error('Error starting scraping:', error);
-        addLog(`Error: ${error.message}`);
-        updateStatus('error', 'Error');
-        isAutomationRunning = false;
-    }
-}
-
-// Handle stop scraping button click
-async function handleStopScraping() {
-    try {
-        // Get current active tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-        if (tab) {
-            // Send stop message to content script
-            await chrome.tabs.sendMessage(tab.id, {
-                action: 'stopAutomation'
-            });
-        }
-
-        // Clear any saved state
-        await chrome.storage.local.remove(['apexNextAccount']);
-
-        // Update UI
-        isAutomationRunning = false;
-        updateStatus('stopped', 'Stopped');
-        addLog('Automation stopped by user');
-        updateButtonState();
-        await savePersistentState();
-
-    } catch (error) {
-        console.error('Error stopping automation:', error);
-        addLog('Error stopping automation: ' + error.message);
-    }
-}
-
-// Open options page
-function openOptionsPage() {
-    chrome.runtime.openOptionsPage();
-}
-
-// Update status display
-function updateStatus(status, text) {
-    statusElement.textContent = text;
-    statusElement.className = `status ${status}`;
-}
-
-// Get status text
-function getStatusText(status) {
-    switch (status) {
-        case 'ready': return 'Ready';
-        case 'processing': return 'Processing...';
-        case 'stopped': return 'Stopped';
-        case 'completed': return 'Completed';
-        case 'error': return 'Error';
-        default: return 'Ready';
-    }
-}
-
-// Add log entry
-function addLog(message) {
-    const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
-    const logEntry = document.createElement('div');
-    logEntry.className = 'log-entry';
-    logEntry.textContent = `[${timestamp}] ${message}`;
-
-    logsElement.appendChild(logEntry);
-    logsElement.scrollTop = logsElement.scrollHeight;
-
-    // Save state after adding log
-    savePersistentState();
-}
-
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-    if (message.action === 'updateStatus') {
-        updateStatus(message.status, getStatusText(message.status));
-
-        // Reset automation running flag when process completes
-        if (['completed', 'stopped', 'error'].includes(message.status)) {
-            isAutomationRunning = false;
-            updateButtonState();
-
-            if (message.status === 'completed') {
-                addLog('✅ Process completed successfully');
-            } else if (message.status === 'stopped') {
-                addLog('🛑 Process stopped');
-            } else if (message.status === 'error') {
-                addLog('❌ Process failed');
-            }
-
-            // Save state after status change
-            await savePersistentState();
-
-            // Reset status after delay
-            setTimeout(async () => {
-                updateStatus('ready', 'Extension ready. Configure settings and start scraping.');
-                await savePersistentState();
-            }, 3000);
-        }
-    } else if (message.action === 'addLog') {
-        addLog(message.message);
-    }
-});
+} // End of duplicate loading check

@@ -1,113 +1,161 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extension Settings - APEX Purchaser</title>
-    <link rel="stylesheet" href="options.css">
+    <title>APEX Purchaser - Settings</title>
+    <link rel="stylesheet" href="popup.css">
+    <style>
+        body {
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .form-section {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
 </head>
+
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Extension Settings</h1>
+        <div class="form-section">
+            <h1>APEX Purchaser Settings</h1>
+
+            <div class="form-group">
+                <label for="cardNumber">Card Number:</label>
+                <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456">
+            </div>
+
+            <div class="form-group">
+                <label for="expiryMonth">Expiry Month:</label>
+                <select id="expiryMonth">
+                    <option value="01">01 - January</option>
+                    <option value="02">02 - February</option>
+                    <option value="03">03 - March</option>
+                    <option value="04">04 - April</option>
+                    <option value="05">05 - May</option>
+                    <option value="06">06 - June</option>
+                    <option value="07">07 - July</option>
+                    <option value="08">08 - August</option>
+                    <option value="09" selected>09 - September</option>
+                    <option value="10">10 - October</option>
+                    <option value="11">11 - November</option>
+                    <option value="12">12 - December</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="expiryYear">Expiry Year:</label>
+                <select id="expiryYear">
+                    <option value="2024">2024</option>
+                    <option value="2025" selected>2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="cvv">CVV:</label>
+                <input type="text" id="cvv" placeholder="123" maxlength="4">
+            </div>
+
+            <div class="form-group">
+                <label for="accountType">Default Account Type:</label>
+                <select id="accountType">
+                    <option value="25k-Tradovate">25k - Tradovate</option>
+                    <option value="50k-Tradovate">50k - Tradovate</option>
+                    <option value="100k-Tradovate">100k - Tradovate</option>
+                    <option value="150k-Tradovate">150k - Tradovate</option>
+                    <option value="200k-Tradovate">200k - Tradovate</option>
+                    <option value="250k-Tradovate">250k - Tradovate</option>
+                    <option value="300k-Tradovate">300k - Tradovate</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="numberOfAccounts">Default Number of Accounts:</label>
+                <input type="number" id="numberOfAccounts" min="1" max="10" value="1">
+            </div>
+
+            <button class="btn" onclick="saveSettings()">Save Settings</button>
+            <button class="btn" onclick="resetSettings()">Reset to Defaults</button>
+
+            <div id="status" class="status" style="display: none;"></div>
         </div>
-        
-        <form id="settingsForm" class="settings-form">
-            <!-- Payment Details Section -->
-            <div class="section">
-                <h2>Payment Details</h2>
-                
-                <div class="form-group">
-                    <label for="cardNumber">Card Number:</label>
-                    <input type="text" id="cardNumber" name="cardNumber" placeholder="1234 5678 9123 4567" maxlength="19">
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="expiryMonth">Expiry Month:</label>
-                        <select id="expiryMonth" name="expiryMonth">
-                            <option value="01">01</option>
-                            <option value="02">02</option>
-                            <option value="03">03</option>
-                            <option value="04">04</option>
-                            <option value="05">05</option>
-                            <option value="06">06</option>
-                            <option value="07">07</option>
-                            <option value="08">08</option>
-                            <option value="09">09</option>
-                            <option value="10">10</option>
-                            <option value="11">11</option>
-                            <option value="12">12</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="expiryYear">Expiry Year:</label>
-                        <select id="expiryYear" name="expiryYear">
-                            <!-- Years will be populated by JavaScript -->
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="cvv">CVV:</label>
-                        <input type="text" id="cvv" name="cvv" placeholder="123" maxlength="4">
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Settings Section -->
-            <div class="section">
-                <h2>Settings</h2>
-                
-                <div class="form-group">
-                    <label for="numberOfAccounts">Number of Accounts:</label>
-                    <input type="number" id="numberOfAccounts" name="numberOfAccounts" min="1" value="1">
-                </div>
-                
-                <div class="form-group">
-                    <label>Select Account Type:</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="selectedAccount" value="25k-Tradovate">
-                            <span>25k Tradovate</span>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="selectedAccount" value="50k-Tradovate">
-                            <span>50k Tradovate</span>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="selectedAccount" value="100k-Tradovate">
-                            <span>100k Tradovate</span>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="selectedAccount" value="150k-Tradovate">
-                            <span>150k Tradovate</span>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="selectedAccount" value="250k-Tradovate">
-                            <span>250k Tradovate</span>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="selectedAccount" value="300k-Tradovate" checked>
-                            <span>300k Tradovate</span>
-                        </label>
-                    </div>
-                    <div class="selected-info">
-                        Selected: <span id="selectedAccountDisplay">300k-Tradovate</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Action Buttons -->
-            <div class="button-group">
-                <button type="submit" class="btn btn-primary">Save Settings</button>
-                <button type="button" id="defaultSettings" class="btn btn-secondary">Default Settings</button>
-            </div>
-        </form>
-        
-        <div id="statusMessage" class="status-message"></div>
     </div>
-    
+
     <script src="options.js"></script>
 </body>
+
 </html>

@@ -1,32 +1,34 @@
 {
   "manifest_version": 3,
-  "name": "APEX Account Purchaser",
-  "version": "1.0.0",
-  "description": "Chrome extension for automated APEX account purchasing",
+  "name": "APEX Purchaser",
+  "version": "3.0.0",
+  "description": "Simple APEX account automation tool",
   "permissions": [
     "storage",
     "activeTab",
-    "scripting",
-    "tabs"
+    "scripting"
   ],
   "host_permissions": [
-    "https://*/*"
+    "https://dashboard.apextraderfunding.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "APEX Purchaser"
   },
-  "options_page": "options.html",
-  "background": {
-    "service_worker": "background.js"
-  },
   "content_scripts": [
     {
-      "matches": ["https://dashboard.apextraderfunding.com/*"],
-      "js": ["config.js", "content.js"],
+      "matches": [
+        "https://dashboard.apextraderfunding.com/member"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

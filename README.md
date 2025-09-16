@@ -1,60 +1,60 @@
-# APEX Account Purchaser Frontend
+# APEX Purchaser - Simple Version
 
-A Next.js frontend application for the APEX Account Purchaser system.
+A clean, simple Chrome extension for automating APEX account creation.
 
 ## Features
 
-- ✅ Login Details form (Username & Password)
-- ✅ Payment Details form (Card Number, Expiry Date, CVV)
-- ✅ Settings (Number of Accounts)
-- ✅ Real-time Activity Log
-- ✅ Status indicator (Ready/Processing/Stopped)
-- ❌ Coupon Code field (removed as requested)
+- ✅ Simple HTML/CSS/JS implementation
+- ✅ Clean, modern UI
+- ✅ Multiple account support
+- ✅ Automatic form filling
+- ✅ Payment processing
+- ✅ Success detection
+- ✅ Real-time logging
 
-## Setup Instructions
+## Installation
 
-1. Install dependencies:
-```bash
-npm install
-```
+1. Download or clone this repository
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable "Developer mode"
+4. Click "Load unpacked" and select the project folder
+5. The extension will appear in your Chrome toolbar
 
-2. Run the development server:
-```bash
-npm run dev
-```
+## Usage
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
+1. Navigate to the APEX dashboard: `https://dashboard.apextraderfunding.com/member`
+2. Click the APEX Purchaser extension icon
+3. Fill in your payment details
+4. Select account type and number of accounts
+5. Click "Start Automation"
+6. The extension will automatically create the specified number of accounts
 
-## Project Structure
+## Files
 
-```
-├── app/
-│   ├── globals.css          # Global styles and Tailwind imports
-│   ├── layout.tsx           # Root layout component
-│   └── page.tsx             # Main page
-├── components/
-│   ├── ApexPurchaser.tsx    # Main purchaser component
-│   └── ActivityLog.tsx      # Activity log component
-├── package.json
-├── tailwind.config.js
-├── tsconfig.json
-└── next.config.js
-```
+- `popup.html` - Main extension interface
+- `popup.css` - Styling
+- `popup.js` - Popup functionality
+- `content.js` - Automation logic
+- `background.js` - Background service worker
+- `manifest.json` - Extension configuration
+- `options.html` - Settings page
 
-## Styling
+## Settings
 
-The application uses:
-- **Tailwind CSS** for utility-first styling
-- **Custom CSS classes** for component-specific styles
-- **Responsive design** that works on desktop and mobile
+Click the "Settings" button to configure default values for:
+- Card number
+- Expiry date
+- CVV
+- Account type
+- Number of accounts
 
-## Backend Integration
+## Troubleshooting
 
-The Activity Log component is designed to receive real-time updates from your backend. You can modify the `addLog` function in `ApexPurchaser.tsx` to integrate with your backend WebSocket or API endpoints.
+- Make sure you're on the APEX dashboard before starting
+- Check that all payment details are correct
+- Ensure you have a stable internet connection
+- Check the activity log for any error messages
 
-## Build for Production
+## Support
 
-```bash
-npm run build
-npm start
-```
+This is a simplified version focused on core functionality. All complex features have been removed for stability.
