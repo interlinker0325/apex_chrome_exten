@@ -13,12 +13,15 @@ if (window.apexPurchaserLoaded) {
             this.sessionId = null;
             this.currentAccount = 0;
             this.totalAccounts = 0;
+            this.stopButtonMode = 'stop'; // 'stop' | 'clear'
             this.init();
         }
 
         init() {
+            this.setupExpiryOptions();
             this.loadSettings();
             this.setupEventListeners();
+            this.setupTabs();
             this.updateUI();
         }
 
@@ -28,9 +31,15 @@ if (window.apexPurchaserLoaded) {
             this.eventListenersAdded = true;
 
             document.getElementById('startBtn').addEventListener('click', () => this.startAutomation());
-            document.getElementById('stopBtn').addEventListener('click', () => this.stopAutomation());
-            document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
-            document.getElementById('clearBtn').addEventListener('click', () => this.clearProgress());
+            document.getElementById('stopBtn').addEventListener('click', () => {
+                if (this.stopButtonMode === 'clear') {
+                    this.clearProgressAndReset();
+                } else {
+                    this.stopAutomation();
+                }
+            });
+            // Settings live in the popup tabs now; no separate options page
+            // Clear button removed with compact always-visible progress
 
             // Auto-save settings on change
             const inputs = document.querySelectorAll('input, select');
@@ -44,20 +53,44 @@ if (window.apexPurchaserLoaded) {
                     this.updateProgress(request.currentAccount, request.totalAccounts);
                 } else if (request.action === 'log') {
                     this.addLog(request.message, request.type);
+                } else if (request.action === 'paymentError') {
+                    // Stop UI, switch to clear mode, and surface the error
+                    this.isRunning = false;
+                    this.updateStatus('error', 'Payment error');
+                    this.setStopButtonMode('clear');
+                    this.updateUI();
+                    if (request.message) {
+                        this.addLog(request.message, 'error');
+                    }
                 }
             });
         }
 
         loadSettings() {
             chrome.storage.sync.get(['apexSettings'], (result) => {
+                const now = new Date();
+                const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+                const currentYear = String(now.getFullYear());
+
                 if (result.apexSettings) {
                     const settings = result.apexSettings;
                     document.getElementById('cardNumber').value = settings.cardNumber || '';
-                    document.getElementById('expiryMonth').value = settings.expiryMonth || '09';
-                    document.getElementById('expiryYear').value = settings.expiryYear || '2025';
+                    document.getElementById('expiryMonth').value = settings.expiryMonth || currentMonth;
+                    document.getElementById('expiryYear').value = settings.expiryYear || currentYear;
                     document.getElementById('cvv').value = settings.cvv || '';
-                    document.getElementById('accountType').value = settings.accountType || '25k-Tradovate';
+                    this.setAccountTypeRadio(settings.accountType || '25k-Tradovate');
                     document.getElementById('numberOfAccounts').value = settings.numberOfAccounts || 1;
+
+                    // Reflect saved total in progress display
+                    this.currentAccount = 0;
+                    this.totalAccounts = parseInt(settings.numberOfAccounts || 0);
+                    this.updateProgress(this.currentAccount, this.totalAccounts);
+                } else {
+                    // Default to current month/year
+                    document.getElementById('expiryMonth').value = currentMonth;
+                    document.getElementById('expiryYear').value = currentYear;
+                    // Default progress state
+                    this.updateProgress(0, parseInt(document.getElementById('numberOfAccounts').value || 0));
                 }
             });
         }
@@ -68,12 +101,19 @@ if (window.apexPurchaserLoaded) {
                 expiryMonth: document.getElementById('expiryMonth').value,
                 expiryYear: document.getElementById('expiryYear').value,
                 cvv: document.getElementById('cvv').value,
-                accountType: document.getElementById('accountType').value,
+                accountType: this.getAccountTypeRadio(),
                 numberOfAccounts: parseInt(document.getElementById('numberOfAccounts').value)
             };
 
             chrome.storage.sync.set({ apexSettings: settings });
             this.addLog('Settings saved');
+
+            // Keep progress total in sync with settings changes when idle
+            if (!this.isRunning) {
+                this.currentAccount = Math.min(this.currentAccount, settings.numberOfAccounts || 0);
+                this.totalAccounts = settings.numberOfAccounts || 0;
+                this.updateProgress(this.currentAccount, this.totalAccounts);
+            }
         }
 
         async startAutomation() {
@@ -105,10 +145,10 @@ if (window.apexPurchaserLoaded) {
                 if (!tab.url.includes('apextraderfunding.com/member')) {
                     this.addLog('Navigating to member page...');
                     await chrome.tabs.update(tab.id, { url: 'https://dashboard.apextraderfunding.com/member' });
-
-                    // Wait for navigation and content script to load
-                    await this.waitForPageAndContentScript(tab.id);
                 }
+
+                // Wait for navigation and content script to load (inject if missing)
+                await this.waitForPageAndContentScript(tab.id);
 
                 // Send automation data
                 const settings = this.getSettings();
@@ -141,6 +181,9 @@ if (window.apexPurchaserLoaded) {
 
         async stopAutomation() {
             try {
+                // Set a persistent stop flag to prevent continuation on next page
+                await chrome.storage.local.set({ apexAutomationStopRequested: { timestamp: Date.now() } });
+
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (tab) {
                     await chrome.tabs.sendMessage(tab.id, { action: 'stopAutomation' });
@@ -153,11 +196,14 @@ if (window.apexPurchaserLoaded) {
             this.updateUI();
             this.addLog('Automation stopped');
             this.updateStatus('ready', 'Ready');
+            this.setStopButtonMode('clear');
+            this.updateUI();
         }
 
         async waitForPageAndContentScript(tabId) {
             const maxAttempts = 10;
             const delay = 1000;
+            let attemptedInjection = false;
 
             for (let i = 0; i < maxAttempts; i++) {
                 try {
@@ -171,7 +217,20 @@ if (window.apexPurchaserLoaded) {
                         return;
                     }
                 } catch (error) {
-                    // Content script not ready yet, continue waiting
+                    // If not yet injected and we have scripting permission, try injecting once
+                    if (!attemptedInjection) {
+                        try {
+                            await chrome.scripting.executeScript({
+                                target: { tabId },
+                                files: ['content.js']
+                            });
+                            this.addLog('Injected content script');
+                            attemptedInjection = true;
+                        } catch (injectErr) {
+                            // Injection might fail on chrome:// or restricted pages; continue retrying
+                        }
+                    }
+                    // Continue waiting
                 }
             }
 
@@ -208,7 +267,7 @@ if (window.apexPurchaserLoaded) {
                 expiryMonth: document.getElementById('expiryMonth').value,
                 expiryYear: document.getElementById('expiryYear').value,
                 cvv: document.getElementById('cvv').value.trim(),
-                accountType: document.getElementById('accountType').value,
+                accountType: this.getAccountTypeRadio(),
                 numberOfAccounts: parseInt(document.getElementById('numberOfAccounts').value),
                 sessionId: 'session-' + Date.now()
             };
@@ -221,10 +280,80 @@ if (window.apexPurchaserLoaded) {
             if (this.isRunning) {
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
+                this.setStopButtonMode('stop');
             } else {
                 startBtn.disabled = false;
-                stopBtn.disabled = true;
+                // Stop button only enabled in 'clear' mode after stop/completion
+                stopBtn.disabled = this.stopButtonMode !== 'clear';
             }
+        }
+
+        setStopButtonMode(mode) {
+            const stopBtn = document.getElementById('stopBtn');
+            this.stopButtonMode = mode;
+            if (mode === 'clear') {
+                stopBtn.textContent = 'Clear & Reset';
+                stopBtn.classList.remove('btn-danger');
+                stopBtn.classList.add('btn-warning');
+            } else {
+                stopBtn.textContent = 'Stop Automation';
+                stopBtn.classList.add('btn-danger');
+                stopBtn.classList.remove('btn-warning');
+            }
+        }
+
+        setupTabs() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabs = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Update buttons
+                    tabButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    // Show target tab
+                    const target = btn.getAttribute('data-target');
+                    tabs.forEach(t => t.classList.remove('active'));
+                    const targetEl = document.querySelector(target);
+                    if (targetEl) targetEl.classList.add('active');
+                });
+            });
+        }
+
+        setupExpiryOptions() {
+            const monthSelect = document.getElementById('expiryMonth');
+            const yearSelect = document.getElementById('expiryYear');
+            if (!monthSelect || !yearSelect) return;
+
+            const monthNames = [
+                '01 - January','02 - February','03 - March','04 - April','05 - May','06 - June',
+                '07 - July','08 - August','09 - September','10 - October','11 - November','12 - December'
+            ];
+            const now = new Date();
+            const currentMonthIdx = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            // Populate months
+            monthSelect.innerHTML = '';
+            for (let i = 0; i < 12; i++) {
+                const value = String(i + 1).padStart(2, '0');
+                const opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = monthNames[i];
+                monthSelect.appendChild(opt);
+            }
+            monthSelect.value = String(currentMonthIdx + 1).padStart(2, '0');
+
+            // Populate years (current to current + 10)
+            yearSelect.innerHTML = '';
+            for (let y = currentYear; y <= currentYear + 10; y++) {
+                const opt = document.createElement('option');
+                opt.value = String(y);
+                opt.textContent = String(y);
+                yearSelect.appendChild(opt);
+            }
+            yearSelect.value = String(currentYear);
         }
 
         updateStatus(status, text) {
@@ -250,50 +379,73 @@ if (window.apexPurchaserLoaded) {
             }
         }
 
-        openSettings() {
-            chrome.tabs.create({ url: 'options.html' });
-        }
+        // openSettings removed; settings handled in popup tabs
 
         updateProgress(current, total) {
             this.currentAccount = current;
             this.totalAccounts = total;
 
-            const progressText = document.getElementById('progressText');
             const progressFill = document.getElementById('progressFill');
-            const progressSection = document.getElementById('progressSection');
+            const progressNums = document.getElementById('progressNums');
 
-            if (current > 0 && total > 0) {
-                progressText.textContent = `Processing account ${current} of ${total}`;
-                const percentage = ((current - 1) / total) * 100;
-                progressFill.style.width = `${percentage}%`;
-                progressSection.style.display = 'block';
-            } else {
-                progressSection.style.display = 'none';
+            const valid = current >= 0 && total >= 0;
+            const percentage = total > 0 ? Math.min(100, Math.max(0, ((current) / total) * 100)) : 0;
+            progressFill.style.width = `${percentage}%`;
+            progressNums.textContent = `${Math.max(0, current)} / ${Math.max(0, total)}`;
+
+            if (total > 0 && current >= total) {
+                // Completed
+                this.isRunning = false;
+                this.updateStatus('success', 'Completed');
+                this.setStopButtonMode('clear');
+                this.updateUI();
             }
         }
 
-        clearProgress() {
+        clearProgressAndReset() {
+            // Reset running state
             this.isRunning = false;
             this.currentAccount = 0;
             this.totalAccounts = 0;
 
-            // Hide progress section
-            document.getElementById('progressSection').style.display = 'none';
+            // Reset progress bar and numbers
+            const progressFill = document.getElementById('progressFill');
+            const progressNums = document.getElementById('progressNums');
+            progressFill.style.width = '0%';
+            progressNums.textContent = '0 / 0';
 
-            // Reset progress bar
-            document.getElementById('progressFill').style.width = '0%';
+            // Reset logs
+            const logContainer = document.getElementById('logContainer');
+            logContainer.innerHTML = '<div class="log-entry">Extension ready. Configure settings and start automation.</div>';
 
-            // Update UI
+            // Reload saved settings (restore last saved values)
+            this.loadSettings();
+
+            // Reset UI to ready
+            this.updateStatus('ready', 'Ready');
+            this.setStopButtonMode('stop');
             this.updateUI();
 
-            // Clear logs
-            document.getElementById('logContainer').innerHTML = '<div class="log-entry">Extension ready. Configure settings and start automation.</div>';
+            // After clearing, disable stop (no more to clear)
+            const stopBtn = document.getElementById('stopBtn');
+            stopBtn.disabled = true;
+        }
 
-            // Stop automation in content script
-            this.stopAutomation();
+        setAccountTypeRadio(value) {
+            const group = document.getElementsByName('accountType');
+            let found = false;
+            group.forEach && group.forEach(r => { if (r.value === value) { r.checked = true; found = true; } });
+            if (!found && group.length > 0) {
+                group[0].checked = true;
+            }
+        }
 
-            this.addLog('Progress cleared - ready to restart');
-            this.updateStatus('ready', 'Ready');
+        getAccountTypeRadio() {
+            const group = document.getElementsByName('accountType');
+            for (let i = 0; i < group.length; i++) {
+                if (group[i].checked) return group[i].value;
+            }
+            return '25k-Tradovate';
         }
     }
 

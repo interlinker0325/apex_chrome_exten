@@ -8,22 +8,24 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #333;
-    min-height: 100vh;
+    overflow: hidden;
 }
 
 .container {
     width: 400px;
-    min-height: 600px;
+    height: 600px;
     background: white;
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 20px;
+    padding: 16px 20px;
     text-align: center;
 }
 
@@ -109,10 +111,11 @@ header h1 {
 }
 
 .button-section {
-    padding: 20px;
+    padding: 16px 20px;
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 .btn {
@@ -175,10 +178,31 @@ header h1 {
     box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
 }
 
+/* Compact progress row */
+.progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.progress-bar.compact {
+    height: 6px;
+    flex: 1;
+}
+
+.progress-nums {
+    font-size: 12px;
+    color: #555;
+    min-width: 48px;
+    text-align: right;
+}
+
+/* Ensure progress section always has padding but no extra borders */
 .progress-section {
-    padding: 20px;
-    background: #f8f9fa;
+    padding: 10px 20px;
+    background: #fff;
     border-bottom: 1px solid #eee;
+    flex-shrink: 0;
 }
 
 .progress-section h3 {
@@ -214,25 +238,41 @@ header h1 {
     width: 0%;
 }
 
-.log-section {
-    padding: 20px;
+/* Tabs layout and visibility */
+.tab-content {
+    display: none;
+    flex: 1;
+    min-height: 0;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Automation tab uses flex only when active */
+#tab-automation.tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ensure only log scrolls inside the automation tab */
+#tab-automation .log-section {
+    padding: 0 20px 20px 20px;
     background: #f8f9fa;
-    max-height: 200px;
-    overflow-y: auto;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    min-height: 0;
 }
 
-.log-section h3 {
-    font-size: 16px;
-    margin-bottom: 12px;
-    color: #333;
-}
-
-.log-container {
+#tab-automation .log-container {
     background: white;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 12px;
-    max-height: 150px;
+    height: auto;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -277,4 +317,69 @@ header h1 {
 
 .log-container::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #eee;
+    flex-shrink: 0;
+}
+
+.tab-button {
+    flex: 1;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #555;
+    transition: background 0.2s ease;
+}
+
+.tab-button:hover {
+    background: #f1f3f5;
+}
+
+.tab-button.active {
+    background: white;
+    border-bottom: 3px solid #667eea;
+    color: #333;
+}
+
+/* 6/3/3 layout for month/year/cvv */
+.grid-6-3-3 {
+    display: grid;
+    grid-template-columns: 6fr 3fr 3fr;
+    gap: 12px;
+}
+
+/* Radio grid for account type (3 rows x 2 columns responsive) */
+.radio-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.radio-item input[type="radio"] {
+    accent-color: #667eea;
+}
+
+/* Ensure selects and inputs align nicely in grid */
+.grid-6-3-3 .form-group select,
+.grid-6-3-3 .form-group input {
+    width: 100%;
 }

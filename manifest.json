@@ -18,7 +18,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://dashboard.apextraderfunding.com/member"
+        "https://dashboard.apextraderfunding.com/*"
       ],
       "js": [
         "content.js"
