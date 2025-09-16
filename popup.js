@@ -393,7 +393,7 @@ if (window.apexPurchaserLoaded) {
             progressFill.style.width = `${percentage}%`;
             progressNums.textContent = `${Math.max(0, current)} / ${Math.max(0, total)}`;
 
-            if (total > 0 && current >= total) {
+            if (total > 0 && current >= total && !this.isRunning) {
                 // Completed
                 this.isRunning = false;
                 this.updateStatus('success', 'Completed');

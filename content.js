@@ -639,14 +639,14 @@ if (window.apexAutomationLoaded) {
       await this.saveAutomationState();
 
       // Update progress to show current account index
-      this.sendProgressUpdate(accountNumber, this.settings.numberOfAccounts);
+      // Progress updated after completion
 
       const success = await this.processSingleAccount(accountNumber);
 
       if (success) {
         this.completedCount += 1;
         // Keep showing progressing index (current account number), not completed count
-        this.sendProgressUpdate(accountNumber, this.settings.numberOfAccounts);
+        // Progress updated after completion
         await this.saveAutomationState();
       }
 
@@ -661,7 +661,7 @@ if (window.apexAutomationLoaded) {
         window.apexAutomationRunning = false;
         await this.clearAutomationState();
         // Final update uses total/total
-        this.sendProgressUpdate(this.settings.numberOfAccounts, this.settings.numberOfAccounts);
+        this.sendProgressUpdate(this.completedCount, this.settings.numberOfAccounts);
         return;
       }
 
