@@ -356,30 +356,80 @@ header h1 {
     gap: 12px;
 }
 
-/* Radio grid for account type (3 rows x 2 columns responsive) */
+/* Fix radio grid alignment: keep input and label text together in one grid cell */
 .radio-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+    row-gap: 10px;
+    align-items: start;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fff;
 }
 
-.radio-item {
-    display: flex;
+.radio-grid .radio-item {
+    display: inline-flex !important;
+    flex-direction: row;
     align-items: center;
     gap: 8px;
-    padding: 8px 10px;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    width: 100%;
 }
 
-.radio-item input[type="radio"] {
-    accent-color: #667eea;
+.radio-grid .radio-item input[type="radio"] {
+    flex: 0 0 auto;
+}
+
+.radio-grid .radio-item span {
+    display: inline-block;
+    flex: 1 1 auto;
+    white-space: normal; /* allow wrapping to avoid overflow */
+}
+
+/* Remove previous selected/hover card styles */
+.radio-item:hover,
+.radio-item:has(input[type="radio"]:checked) {
+    border: none;
+    box-shadow: none;
+}
+
+/* Force radio item to be single-row flex regardless of generic label rules */
+.radio-grid .radio-item {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+}
+
+.radio-grid .radio-item span {
+    white-space: nowrap;
+}
+
+.radio-grid .radio-item input[type="radio"] {
+    vertical-align: middle;
 }
 
 /* Ensure selects and inputs align nicely in grid */
 .grid-6-3-3 .form-group select,
 .grid-6-3-3 .form-group input {
     width: 100%;
+}
+
+/* Ensure each radio item renders input + text on one line */
+.radio-grid .radio-item {
+    display: grid !important;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    column-gap: 8px;
+    margin: 0; /* override generic label margins */
+}
+
+.radio-grid .radio-item input[type="radio"] {
+    justify-self: start;
+}
+
+.radio-grid .radio-item span {
+    white-space: normal; /* allow wrapping inside same line container */
 }
