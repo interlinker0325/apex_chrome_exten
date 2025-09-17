@@ -101,6 +101,9 @@ if (window.apexAutomationLoaded) {
         // Clear any prior stop request flag on new start
         await chrome.storage.local.remove(['apexAutomationStopRequested']);
 
+        // Persist initial state so the next page can continue (nextAccount = 1)
+        await this.saveAutomationState(automationState.completedCount || 0);
+
         // Send immediate response to popup
         sendResponse({ success: true });
 
@@ -189,6 +192,8 @@ if (window.apexAutomationLoaded) {
 
       if (this.shouldAbort()) return;
       this.addLog(`Navigating to signup page for account ${accountNumber}...`);
+      // Ensure state exists so the next page can resume this account
+      await this.saveAutomationState(accountNumber - 1);
       window.location.href = signupUrl;
 
       await this.waitForNavigation();
