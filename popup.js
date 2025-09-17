@@ -20,6 +20,7 @@ if (window.apexPurchaserLoaded) {
             this.loadSettings();
             this.setupEventListeners();
             this.setupTabs();
+            this.restoreLogs();
             this.updateUI();
         }
 
@@ -64,11 +65,38 @@ if (window.apexPurchaserLoaded) {
             });
         }
 
+        async restoreLogs() {
+            try {
+                const stored = await chrome.storage.local.get(['apexLogs']);
+                const logs = Array.isArray(stored.apexLogs) ? stored.apexLogs : [];
+                const logContainer = document.getElementById('logContainer');
+                // Clear initial line and repopulate
+                logContainer.innerHTML = '';
+                if (logs.length === 0) {
+                    logContainer.innerHTML = '<div class="log-entry">Extension ready. Configure settings and start automation.</div>';
+                    return;
+                }
+                logs.forEach(entry => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = `log-entry ${entry.type || 'info'}`;
+                    const ts = new Date(entry.t || Date.now()).toLocaleTimeString();
+                    logEntry.textContent = `[${ts}] ${entry.message}`;
+                    logContainer.appendChild(logEntry);
+                });
+                logContainer.scrollTop = logContainer.scrollHeight;
+            } catch (e) {
+                // Fall back to default
+            }
+        }
+
         async loadSettings() {
             const result = await chrome.storage.sync.get(['apexSettings']);
             const now = new Date();
             const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
             const currentYear = String(now.getFullYear());
+
+            const automationState = await chrome.storage.local.get(['apexAutomationState']);
+            const state = automationState.apexAutomationState || null;
 
             if (result.apexSettings) {
                 const settings = result.apexSettings;
@@ -79,15 +107,55 @@ if (window.apexPurchaserLoaded) {
                 this.setAccountTypeRadio(settings.accountType || '25k-Tradovate');
                 document.getElementById('numberOfAccounts').value = settings.numberOfAccounts || 1;
 
-                const automationState = await chrome.storage.local.get(['apexAutomationState']);
-                const completed = parseInt((automationState.apexAutomationState && automationState.apexAutomationState.completedCount) || 0);
-                this.updateProgress(completed, parseInt(settings.numberOfAccounts || 0));
+                const completed = parseInt((state && state.completedCount) || 0);
+                const total = parseInt((state && state.settings && state.settings.numberOfAccounts) || settings.numberOfAccounts || 0);
+                this.updateProgress(completed, total);
+
+                // Restore running UI state if automation is ongoing
+                if (state && state.isRunning) {
+                    this.isRunning = true;
+                    this.updateStatus('processing', 'Running...');
+                    this.setStopButtonMode('stop');
+                    this.updateUI();
+                } else if (total > 0 && completed >= total) {
+                    // Completed state
+                    this.isRunning = false;
+                    this.updateStatus('success', 'Completed');
+                    this.setStopButtonMode('clear');
+                    this.updateUI();
+                } else {
+                    // Ready/idle state
+                    this.isRunning = false;
+                    this.updateStatus('ready', 'Ready');
+                    this.setStopButtonMode('stop');
+                    this.updateUI();
+                }
             } else {
                 // Default to current month/year
                 document.getElementById('expiryMonth').value = currentMonth;
                 document.getElementById('expiryYear').value = currentYear;
-                // Default progress state
-                this.updateProgress(0, parseInt(document.getElementById('numberOfAccounts').value || 0));
+
+                // If state exists, prefer totals from state for progress
+                const completed = parseInt((state && state.completedCount) || 0);
+                const total = parseInt((state && state.settings && state.settings.numberOfAccounts) || (document.getElementById('numberOfAccounts').value || 0));
+                this.updateProgress(completed, total);
+
+                if (state && state.isRunning) {
+                    this.isRunning = true;
+                    this.updateStatus('processing', 'Running...');
+                    this.setStopButtonMode('stop');
+                    this.updateUI();
+                } else if (total > 0 && completed >= total) {
+                    this.isRunning = false;
+                    this.updateStatus('success', 'Completed');
+                    this.setStopButtonMode('clear');
+                    this.updateUI();
+                } else {
+                    this.isRunning = false;
+                    this.updateStatus('ready', 'Ready');
+                    this.setStopButtonMode('stop');
+                    this.updateUI();
+                }
             }
         }
 
@@ -405,6 +473,9 @@ if (window.apexPurchaserLoaded) {
             // Reset logs
             const logContainer = document.getElementById('logContainer');
             logContainer.innerHTML = '<div class="log-entry">Extension ready. Configure settings and start automation.</div>';
+
+            // Also clear persisted logs
+            chrome.storage.local.remove(['apexLogs']);
 
             // Reload saved settings (restore last saved values)
             this.loadSettings();
