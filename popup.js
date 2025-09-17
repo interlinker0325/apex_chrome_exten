@@ -80,7 +80,8 @@ if (window.apexPurchaserLoaded) {
                 document.getElementById('numberOfAccounts').value = settings.numberOfAccounts || 1;
 
                 const automationState = await chrome.storage.local.get(['apexAutomationState']);
-                this.updateProgress(parseInt(automationState.completedCount || 0), parseInt(settings.numberOfAccounts || 0));
+                const completed = parseInt((automationState.apexAutomationState && automationState.apexAutomationState.completedCount) || 0);
+                this.updateProgress(completed, parseInt(settings.numberOfAccounts || 0));
             } else {
                 // Default to current month/year
                 document.getElementById('expiryMonth').value = currentMonth;
@@ -106,7 +107,8 @@ if (window.apexPurchaserLoaded) {
             // Keep progress total in sync with settings changes when idle
             if (!this.isRunning) {
                 const automationState = await chrome.storage.local.get(['apexAutomationState']);
-                this.updateProgress(parseInt(automationState.completedCount) || 0, parseInt(settings.numberOfAccounts || 0));
+                const completed = parseInt((automationState.apexAutomationState && automationState.apexAutomationState.completedCount) || 0);
+                this.updateProgress(completed, parseInt(settings.numberOfAccounts || 0));
             }
         }
 
@@ -381,7 +383,7 @@ if (window.apexPurchaserLoaded) {
             const percentage = total > 0 ? Math.min(100, Math.max(0, ((current) / total) * 100)) : 0;
             progressFill.style.width = `${percentage}%`;
             progressNums.textContent = `${Math.max(0, current)} / ${Math.max(0, total)}`;
-            if (total > 0 && current >= total && !this.isRunning) {
+            if (total > 0 && current >= total) {
                 // Completed
                 this.isRunning = false;
                 this.updateStatus('success', 'Completed');

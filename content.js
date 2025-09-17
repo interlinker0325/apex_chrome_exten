@@ -102,13 +102,15 @@ if (window.apexAutomationLoaded) {
         await chrome.storage.local.remove(['apexAutomationStopRequested']);
 
         // Persist initial state so the next page can continue (nextAccount = 1)
-        await this.saveAutomationState(automationState.completedCount || 0);
+        await this.saveAutomationState((automationState.apexAutomationState && automationState.apexAutomationState.completedCount) || 0);
+        // Emit initial progress
+        this.sendProgressUpdate(((automationState.apexAutomationState && automationState.apexAutomationState.completedCount) || 0), this.settings.numberOfAccounts);
 
         // Send immediate response to popup
         sendResponse({ success: true });
 
         // Start processing first account only; subsequent accounts handled by continuation after navigation
-        this.handleAccountFlow(automationState.nextAccount || 1).catch(error => {
+        this.handleAccountFlow((automationState.apexAutomationState && automationState.apexAutomationState.nextAccount) || 1).catch(error => {
           this.addLog(`Error during automation: ${error.message}`, 'error');
           this.isRunning = false;
           window.apexAutomationRunning = false;
@@ -492,8 +494,8 @@ if (window.apexAutomationLoaded) {
           // Check if automation is not already running globally and state is recent
           const timeSinceLastUpdate = Date.now() - savedState.timestamp;
 
-          // Only continue if no other instance is running and state is recent
-          if (!window.apexAutomationRunning && !this.isRunning && timeSinceLastUpdate < 30000) {
+          // Only continue if state is reasonably recent (2 minutes)
+          if (!window.apexAutomationRunning && !this.isRunning && timeSinceLastUpdate < 120000) {
             // Proceed with continuation even if a lock exists, since previous page likely unloaded
             if (!result.apexAutomationLock) {
               await chrome.storage.local.set({
@@ -510,6 +512,28 @@ if (window.apexAutomationLoaded) {
 
             this.addLog('Found ongoing automation, continuing...');
             this.settings = savedState.settings;
+
+            // Handle case: we landed on a success/thanks page after payment redirect
+            const onSuccessPage = window.location.href.includes('/thanks') || window.location.href.includes('/success');
+            if (onSuccessPage) {
+              const justCompleted = Math.max((savedState.nextAccount || 1) - 1, 1);
+              // Persist completion and emit progress
+              await this.saveAutomationState(justCompleted);
+              this.sendProgressUpdate(justCompleted, this.settings.numberOfAccounts);
+
+              if (justCompleted >= this.settings.numberOfAccounts) {
+                this.addLog('🎉 All accounts processed!');
+                this.isRunning = false;
+                window.apexAutomationRunning = false;
+                this.sendProgressUpdate(justCompleted, this.settings.numberOfAccounts);
+                return;
+              }
+
+              const nextAccountAfterSuccess = justCompleted + 1;
+              this.addLog(`Preparing next account ${nextAccountAfterSuccess}/${this.settings.numberOfAccounts}...`);
+              await this.navigateToSignupPage(nextAccountAfterSuccess);
+              return;
+            }
 
             // Resume at next account after completed ones
             const nextAccount = savedState.nextAccount;
@@ -593,6 +617,7 @@ if (window.apexAutomationLoaded) {
       if (success) {
         // Progress updated after completion
         await this.saveAutomationState(accountNumber);
+        this.sendProgressUpdate(accountNumber, this.settings.numberOfAccounts);
       }
 
       // Decide next step
