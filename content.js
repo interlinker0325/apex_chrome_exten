@@ -14,9 +14,7 @@ if (window.apexAutomationLoaded) {
   class ApexAutomation {
     constructor() {
       this.isRunning = false;
-      this.currentAccount = 1;
       this.settings = null;
-      this.completedCount = 0;
       this.hasResumedOnce = false;
       this.init();
     }
@@ -79,12 +77,11 @@ if (window.apexAutomationLoaded) {
         // Set startup lock
         await chrome.storage.local.set({ [startupLockKey]: { instanceId: instanceId, timestamp: Date.now() } });
 
+        const automationState = await chrome.storage.local.get(['apexAutomationState']);
         // Set flags immediately to prevent race conditions
         this.isRunning = true;
         window.apexAutomationRunning = true;
         this.settings = data;
-        this.currentAccount = 1;
-        this.completedCount = 0;
 
         this.addLog('Starting APEX automation...');
         this.addLog(`Processing ${this.settings.numberOfAccounts} accounts`);
@@ -98,9 +95,6 @@ if (window.apexAutomationLoaded) {
           }
         });
 
-        // Save automation state
-        await this.saveAutomationState();
-
         // Clear startup lock
         await chrome.storage.local.remove([startupLockKey]);
 
@@ -111,7 +105,7 @@ if (window.apexAutomationLoaded) {
         sendResponse({ success: true });
 
         // Start processing first account only; subsequent accounts handled by continuation after navigation
-        this.handleAccountFlow(1).catch(error => {
+        this.handleAccountFlow(automationState.nextAccount || 1).catch(error => {
           this.addLog(`Error during automation: ${error.message}`, 'error');
           this.isRunning = false;
           window.apexAutomationRunning = false;
@@ -133,50 +127,6 @@ if (window.apexAutomationLoaded) {
       await this.clearAutomationState();
       this.addLog('Automation stopped by user');
       sendResponse({ success: true });
-    }
-
-    async processAccounts() {
-      for (let i = 1; i <= this.settings.numberOfAccounts; i++) {
-        if (!this.isRunning) break;
-
-        this.currentAccount = i;
-        this.addLog(`🔄 Processing account ${i}/${this.settings.numberOfAccounts}`);
-
-        // Save state before processing
-        await this.saveAutomationState();
-
-        try {
-          const success = await this.processSingleAccount(i);
-          if (success) {
-            this.completedCount += 1;
-            this.sendProgressUpdate(this.completedCount, this.settings.numberOfAccounts);
-            this.addLog(`✅ Account ${i} completed successfully`);
-          } else {
-            this.addLog(`❌ Account ${i} failed`, 'error');
-          }
-        } catch (error) {
-          this.addLog(`❌ Account ${i} failed: ${error.message}`, 'error');
-        }
-
-        if (!this.isRunning) break;
-
-        // Wait before next account
-        if (i < this.settings.numberOfAccounts) {
-          await this.delay(2000);
-        }
-      }
-
-      if (this.completedCount >= this.settings.numberOfAccounts) {
-        this.addLog('🎉 All accounts processed!');
-      }
-      this.isRunning = false;
-      window.apexAutomationRunning = false;
-
-      // Clear automation state when done
-      await this.clearAutomationState();
-
-      // Send final progress update
-      this.sendProgressUpdate(this.completedCount, this.settings.numberOfAccounts);
     }
 
     async processSingleAccount(accountNumber) {
@@ -557,11 +507,10 @@ if (window.apexAutomationLoaded) {
             this.settings = savedState.settings;
 
             // Resume at next account after completed ones
-            const nextAccount = Math.min(savedTotal, (savedState.completedCount || 0) + 1);
-            this.currentAccount = nextAccount;
+            const nextAccount = savedState.nextAccount;
 
             // Continue with the next account
-            await this.handleAccountFlow(this.currentAccount);
+            await this.handleAccountFlow(nextAccount);
           } else {
             this.addLog('Automation already running or state too old, skipping continuation');
           }
@@ -571,14 +520,14 @@ if (window.apexAutomationLoaded) {
       }
     }
 
-    async saveAutomationState() {
+    async saveAutomationState(accountNumber) {
       try {
         await chrome.storage.local.set({
           apexAutomationState: {
             isRunning: this.isRunning,
             settings: this.settings,
-            completedCount: this.completedCount,
-            nextAccount: Math.min((this.settings && this.settings.numberOfAccounts) || 0, this.completedCount + 1),
+            completedCount: accountNumber,
+            nextAccount: accountNumber + 1,
             timestamp: Date.now()
           }
         });
@@ -634,20 +583,11 @@ if (window.apexAutomationLoaded) {
         return;
       }
 
-      // Persist current intent
-      this.currentAccount = accountNumber;
-      await this.saveAutomationState();
-
-      // Update progress to show current account index
-      // Progress updated after completion
-
       const success = await this.processSingleAccount(accountNumber);
 
       if (success) {
-        this.completedCount += 1;
-        // Keep showing progressing index (current account number), not completed count
         // Progress updated after completion
-        await this.saveAutomationState();
+        await this.saveAutomationState(accountNumber);
       }
 
       // Decide next step
@@ -655,18 +595,17 @@ if (window.apexAutomationLoaded) {
         return;
       }
 
-      if (this.completedCount >= this.settings.numberOfAccounts) {
+      if (accountNumber >= this.settings.numberOfAccounts) {
         this.addLog('🎉 All accounts processed!');
         this.isRunning = false;
         window.apexAutomationRunning = false;
-        await this.clearAutomationState();
         // Final update uses total/total
-        this.sendProgressUpdate(this.completedCount, this.settings.numberOfAccounts);
+        this.sendProgressUpdate(accountNumber, this.settings.numberOfAccounts);
         return;
       }
 
       // If the last account failed, we still proceed to next attempt
-      const nextAccount = this.completedCount + 1;
+      const nextAccount = accountNumber + 1;
       this.addLog(`Preparing next account ${nextAccount}/${this.settings.numberOfAccounts}...`);
       // Navigate to signup for next account to trigger a fresh page and continuation
       await this.navigateToSignupPage(nextAccount);

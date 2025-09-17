@@ -11,8 +11,6 @@ if (window.apexPurchaserLoaded) {
         constructor() {
             this.isRunning = false;
             this.sessionId = null;
-            this.currentAccount = 0;
-            this.totalAccounts = 0;
             this.stopButtonMode = 'stop'; // 'stop' | 'clear'
             this.init();
         }
@@ -66,36 +64,33 @@ if (window.apexPurchaserLoaded) {
             });
         }
 
-        loadSettings() {
-            chrome.storage.sync.get(['apexSettings'], (result) => {
-                const now = new Date();
-                const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-                const currentYear = String(now.getFullYear());
+        async loadSettings() {
+            const result = await chrome.storage.sync.get(['apexSettings']);
+            const now = new Date();
+            const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+            const currentYear = String(now.getFullYear());
 
-                if (result.apexSettings) {
-                    const settings = result.apexSettings;
-                    document.getElementById('cardNumber').value = settings.cardNumber || '';
-                    document.getElementById('expiryMonth').value = settings.expiryMonth || currentMonth;
-                    document.getElementById('expiryYear').value = settings.expiryYear || currentYear;
-                    document.getElementById('cvv').value = settings.cvv || '';
-                    this.setAccountTypeRadio(settings.accountType || '25k-Tradovate');
-                    document.getElementById('numberOfAccounts').value = settings.numberOfAccounts || 1;
+            if (result.apexSettings) {
+                const settings = result.apexSettings;
+                document.getElementById('cardNumber').value = settings.cardNumber || '';
+                document.getElementById('expiryMonth').value = settings.expiryMonth || currentMonth;
+                document.getElementById('expiryYear').value = settings.expiryYear || currentYear;
+                document.getElementById('cvv').value = settings.cvv || '';
+                this.setAccountTypeRadio(settings.accountType || '25k-Tradovate');
+                document.getElementById('numberOfAccounts').value = settings.numberOfAccounts || 1;
 
-                    // Reflect saved total in progress display
-                    this.currentAccount = 0;
-                    this.totalAccounts = parseInt(settings.numberOfAccounts || 0);
-                    this.updateProgress(this.currentAccount, this.totalAccounts);
-                } else {
-                    // Default to current month/year
-                    document.getElementById('expiryMonth').value = currentMonth;
-                    document.getElementById('expiryYear').value = currentYear;
-                    // Default progress state
-                    this.updateProgress(0, parseInt(document.getElementById('numberOfAccounts').value || 0));
-                }
-            });
+                const automationState = await chrome.storage.local.get(['apexAutomationState']);
+                this.updateProgress(parseInt(automationState.completedCount || 0), parseInt(settings.numberOfAccounts || 0));
+            } else {
+                // Default to current month/year
+                document.getElementById('expiryMonth').value = currentMonth;
+                document.getElementById('expiryYear').value = currentYear;
+                // Default progress state
+                this.updateProgress(0, parseInt(document.getElementById('numberOfAccounts').value || 0));
+            }
         }
 
-        saveSettings() {
+        async saveSettings() {
             const settings = {
                 cardNumber: document.getElementById('cardNumber').value,
                 expiryMonth: document.getElementById('expiryMonth').value,
@@ -105,14 +100,13 @@ if (window.apexPurchaserLoaded) {
                 numberOfAccounts: parseInt(document.getElementById('numberOfAccounts').value)
             };
 
-            chrome.storage.sync.set({ apexSettings: settings });
+            await chrome.storage.sync.set({ apexSettings: settings });
             this.addLog('Settings saved');
 
             // Keep progress total in sync with settings changes when idle
             if (!this.isRunning) {
-                this.currentAccount = Math.min(this.currentAccount, settings.numberOfAccounts || 0);
-                this.totalAccounts = settings.numberOfAccounts || 0;
-                this.updateProgress(this.currentAccount, this.totalAccounts);
+                const automationState = await chrome.storage.local.get(['apexAutomationState']);
+                this.updateProgress(parseInt(automationState.completedCount) || 0, parseInt(settings.numberOfAccounts || 0));
             }
         }
 
@@ -129,8 +123,6 @@ if (window.apexPurchaserLoaded) {
 
             try {
                 this.isRunning = true;
-                this.currentAccount = 0;
-                this.totalAccounts = parseInt(document.getElementById('numberOfAccounts').value);
                 this.updateUI();
                 this.addLog('Starting APEX automation...');
 
@@ -382,9 +374,6 @@ if (window.apexPurchaserLoaded) {
         // openSettings removed; settings handled in popup tabs
 
         updateProgress(current, total) {
-            this.currentAccount = current;
-            this.totalAccounts = total;
-
             const progressFill = document.getElementById('progressFill');
             const progressNums = document.getElementById('progressNums');
 
@@ -392,7 +381,6 @@ if (window.apexPurchaserLoaded) {
             const percentage = total > 0 ? Math.min(100, Math.max(0, ((current) / total) * 100)) : 0;
             progressFill.style.width = `${percentage}%`;
             progressNums.textContent = `${Math.max(0, current)} / ${Math.max(0, total)}`;
-
             if (total > 0 && current >= total && !this.isRunning) {
                 // Completed
                 this.isRunning = false;
@@ -405,8 +393,6 @@ if (window.apexPurchaserLoaded) {
         clearProgressAndReset() {
             // Reset running state
             this.isRunning = false;
-            this.currentAccount = 0;
-            this.totalAccounts = 0;
 
             // Reset progress bar and numbers
             const progressFill = document.getElementById('progressFill');
